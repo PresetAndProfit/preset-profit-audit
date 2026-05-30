@@ -1,0 +1,193 @@
+{
+  "name": "P&P – Long-Term Nurture & Newsletter (Scheduler)",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [ { "field": "hours", "hoursInterval": 3 } ] } },
+      "id": "node-cron",
+      "name": "Every 3 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-1040, 320]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_CONTACTS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Contacts", "mode": "name" },
+        "options": {}
+      },
+      "id": "node-read",
+      "name": "Read Contacts",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-800, 320],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Long-term nurture: pick contacts due for their next value/seasonal touch.\n// AI writes the copy downstream; this node selects who's due + builds the content brief.\n// Version-safe Luxon/Date math (no $DateTime). Business-hours + daily-cap + frequency-cap gated.\nconst openH = Number($env.BUSINESS_HOURS_START || 9);\nconst closeH = Number($env.BUSINESS_HOURS_END || 18);\nif (!($now.hour >= openH && $now.hour < closeH)) return []; // quiet/business-hours gate\nconst interval = Number($env.NURTURE_INTERVAL_DAYS || 30);\nconst freqCap = Number($env.FREQUENCY_CAP_DAYS || Math.max(7, Math.floor(interval / 2)));\nconst maxTouches = Number($env.MAX_TOUCHES || 0); // 0 = evergreen (never stop)\nconst channelsRaw = (($env.NURTURE_CHANNELS || 'email,sms').split(',')).map(s => s.trim().toLowerCase()).filter(Boolean);\nconst dailyCap = Number($env.DAILY_CAP || 200);\nconst biz = $env.BUSINESS_NAME || 'us';\nconst industry = $env.BUSINESS_INDUSTRY || 'local service';\nconst nowMs = $now.toMillis();\nconst today = $now.toISODate();\nconst month = $now.monthLong;\nconst seasons = ['Winter','Winter','Spring','Spring','Spring','Summer','Summer','Summer','Fall','Fall','Fall','Winter'];\nconst season = seasons[$now.month - 1];\nconst yes = v => String(v || '').toLowerCase() === 'yes';\nconst dateOf = v => { const t = new Date(v).getTime(); return isNaN(t) ? '' : new Date(t).toISOString().slice(0,10); };\nconst rows = $input.all().map(i => i.json);\nconst sentToday = rows.filter(r => r.Last_Touch_At && dateOf(r.Last_Touch_At) === today).length;\nlet remaining = Math.max(0, dailyCap - sentToday);\nconst terminal = s => ['unsubscribed','do not contact','converted','bounced','complete'].some(t => s.includes(t));\nconst out = [];\nfor (const r of rows) {\n  if (remaining <= 0) break;\n  if (yes(r.Opted_Out)) continue;\n  if (String(r.Sequence_Active || 'Yes').toLowerCase() !== 'yes') continue;\n  if (terminal(String(r.Status || '').toLowerCase())) continue;\n  if (!r.Customer_Phone && !r.Customer_Email) continue;\n  const count = Number(r.Touch_Count || 0);\n  if (maxTouches > 0 && count >= maxTouches) continue;\n  // Frequency cap: never message the same contact more often than freqCap days.\n  if (r.Last_Touch_At && (nowMs - new Date(r.Last_Touch_At).getTime()) < freqCap * 86400000) continue;\n  const due = r.Next_Touch_At ? nowMs >= new Date(r.Next_Touch_At).getTime() : true;\n  if (!due) continue;\n  const nextCount = count + 1;\n  const isLast = maxTouches > 0 && nextCount >= maxTouches;\n  // Channel rotation by touch index, falling back to whatever the contact actually has.\n  let channel = channelsRaw[count % channelsRaw.length] || 'email';\n  if (channel === 'email' && !r.Customer_Email) channel = 'sms';\n  if (channel === 'sms' && !r.Customer_Phone) channel = 'email';\n  if (channel === 'sms' && !r.Customer_Phone) continue;\n  if (channel === 'email' && !r.Customer_Email) continue;\n  const first = r.Customer_Name ? String(r.Customer_Name).split(' ')[0] : '';\n  const nextAt = new Date(nowMs + interval * 86400000).toISOString();\n  out.push({ json: { ...r, _channel: channel, _first: first, _season: season, _month: month, _industry: industry, _segment: r.Segment || '', _last_service: r.Last_Service || '', _next_count: nextCount, _is_last: isLast, _next_touch_at: nextAt } });\n  remaining--;\n}\nreturn out;"
+      },
+      "id": "node-find",
+      "name": "Find Due Touches",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-560, 320]
+    },
+    {
+      "parameters": { "batchSize": 1, "options": {} },
+      "id": "node-loop",
+      "name": "Loop Contacts",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [-320, 320]
+    },
+    {
+      "parameters": {
+        "modelId": { "__rl": true, "value": "gpt-4o-mini", "mode": "list" },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "=You write ONE short, friendly, value-first nurture message for {{ $env.BUSINESS_NAME }}, a {{ $env.BUSINESS_INDUSTRY }} business, to a past or prospective customer to stay top-of-mind. It is currently {{ $json._month }} ({{ $json._season }}). Customer first name: {{ $json._first || 'there' }}. Segment/notes: {{ $json._segment || 'general' }}. Last service on file: {{ $json._last_service || 'none recorded' }}.\n\nGoal: be genuinely useful and seasonally relevant (a maintenance tip, seasonal reminder, or helpful nudge for this kind of business) — NOT a hard sell. Warmly invite them to reach out if they need help.\n\nReturn STRICT JSON only. Schema: {\"topic\":\"2-4 word label of the content angle\",\"sms\":\"<=300 char friendly, helpful SMS; do NOT include any opt-out text (added automatically)\",\"email_subject\":\"<=60 char subject\",\"email_body\":\"2-4 short plain-text paragraphs, helpful and seasonal, with a soft invitation to reply or call\"}.\n\nHARD RULES: Never invent prices, discounts, percentages, dates, deadlines, or guarantees. Never claim a specific past purchase unless the last-service note states it. Keep it warm, concise, human. At most one emoji. No text outside the JSON object."
+            },
+            { "role": "user", "content": "=Write this period's nurture touch (touch #{{ $json._next_count }}) for this {{ $env.BUSINESS_INDUSTRY }} customer." }
+          ]
+        },
+        "jsonOutput": true,
+        "options": { "temperature": 0.7 }
+      },
+      "id": "node-generate",
+      "name": "Generate Content (AI)",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [-80, 320],
+      "credentials": { "openAiApi": { "id": "OPENAI_CRED", "name": "P&P OpenAI" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse AI content, enforce guardrails in CODE: length cap, appended business identity + opt-out.\n// Safe deterministic fallback so a bad model response never sends broken/empty copy.\nconst aiRaw = $('Generate Content (AI)').first().json.message?.content ?? $('Generate Content (AI)').first().json;\nlet p;\ntry { p = typeof aiRaw === 'string' ? JSON.parse(aiRaw) : aiRaw; } catch (e) { p = null; }\nconst r = $('Loop Contacts').item.json;\nconst biz = $env.BUSINESS_NAME || 'us';\nconst first = r._first ? (' ' + r._first) : '';\nconst season = (r._season || 'this season');\nif (!p || !p.sms) {\n  p = {\n    topic: season + ' check-in',\n    sms: `Hi${first}, a quick hello from ${biz}. As we head into ${String(season).toLowerCase()}, just a reminder we're here if we can help with anything.`,\n    email_subject: `${season} check-in from ${biz}`,\n    email_body: `Hi${first},\\n\\nJust a quick hello from ${biz}. As ${String(season).toLowerCase()} approaches, we wanted to stay in touch — if there's anything we can help you with, simply reply or give us a call.\\n\\nThanks for being a valued customer.`\n  };\n}\nlet sms = String(p.sms || '').replace(/\\s+/g, ' ').slice(0, 300).trim();\nsms = `${sms} Reply STOP to opt out.`;\nconst emailBody = `${String(p.email_body || '').trim()}\\n\\n— ${biz}\\n\\nReply STOP to unsubscribe.`;\nreturn [{ json: { ...r, _topic: p.topic || 'Nurture', _sms_msg: sms, _email_subject: (p.email_subject || `A note from ${biz}`), _email_body: emailBody, _new_status: r._is_last ? 'Nurture Complete' : 'Nurtured' } }];"
+      },
+      "id": "node-finalize",
+      "name": "Finalize Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [160, 320]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            { "conditions": { "options": { "caseSensitive": false, "typeValidation": "loose" }, "conditions": [ { "leftValue": "={{ $json._channel }}", "rightValue": "email", "operator": { "type": "string", "operation": "equals" } } ], "combinator": "and" }, "outputKey": "Email" },
+            { "conditions": { "options": { "caseSensitive": false, "typeValidation": "loose" }, "conditions": [ { "leftValue": "={{ $json._channel }}", "rightValue": "sms", "operator": { "type": "string", "operation": "equals" } } ], "combinator": "and" }, "outputKey": "SMS" }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "node-route",
+      "name": "Route Channel",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [400, 320]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.Customer_Email }}",
+        "subject": "={{ $json._email_subject }}",
+        "emailType": "text",
+        "message": "={{ $json._email_body }}",
+        "options": {}
+      },
+      "id": "node-email",
+      "name": "Send Nurture Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [660, 200],
+      "credentials": { "gmailOAuth2": { "id": "GMAIL_CRED", "name": "P&P Gmail" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "resource": "sms", "operation": "send",
+        "from": "={{ $env.TWILIO_NUMBER }}",
+        "to": "={{ $json.Customer_Phone }}",
+        "message": "={{ $json._sms_msg }}",
+        "options": {}
+      },
+      "id": "node-sms",
+      "name": "Send Nurture SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [660, 440],
+      "credentials": { "twilioApi": { "id": "TWILIO_CRED", "name": "P&P Twilio" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_CONTACTS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Touch_Log", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Contact_ID": "={{ $json.Contact_ID }}",
+            "Sent_At": "={{ $now.toISO() }}",
+            "Touch_Number": "={{ $json._next_count }}",
+            "Channel": "={{ $json._channel }}",
+            "Topic": "={{ $json._topic }}",
+            "Message": "={{ $json._channel === 'email' ? $json._email_subject : $json._sms_msg }}",
+            "Customer_Phone": "={{ $json.Customer_Phone }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-logtouch",
+      "name": "Log Touch",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [920, 320],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_CONTACTS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Contacts", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Contact_ID"],
+          "value": {
+            "Contact_ID": "={{ $json.Contact_ID }}",
+            "Touch_Count": "={{ $json._next_count }}",
+            "Last_Touch_At": "={{ $now.toISO() }}",
+            "Last_Topic": "={{ $json._topic }}",
+            "Next_Touch_At": "={{ $json._is_last ? '' : $json._next_touch_at }}",
+            "Sequence_Active": "={{ $json._is_last ? 'No' : 'Yes' }}",
+            "Status": "={{ $json._new_status }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-update",
+      "name": "Update Sequence State",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1180, 320],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    }
+  ],
+  "connections": {
+    "Every 3 Hours": { "main": [[{ "node": "Read Contacts", "type": "main", "index": 0 }]] },
+    "Read Contacts": { "main": [[{ "node": "Find Due Touches", "type": "main", "index": 0 }]] },
+    "Find Due Touches": { "main": [[{ "node": "Loop Contacts", "type": "main", "index": 0 }]] },
+    "Loop Contacts": { "main": [[{ "node": "Generate Content (AI)", "type": "main", "index": 0 }]] },
+    "Generate Content (AI)": { "main": [[{ "node": "Finalize Content", "type": "main", "index": 0 }]] },
+    "Finalize Content": { "main": [[{ "node": "Route Channel", "type": "main", "index": 0 }]] },
+    "Route Channel": { "main": [[{ "node": "Send Nurture Email", "type": "main", "index": 0 }], [{ "node": "Send Nurture SMS", "type": "main", "index": 0 }], []] },
+    "Send Nurture Email": { "main": [[{ "node": "Log Touch", "type": "main", "index": 0 }]] },
+    "Send Nurture SMS": { "main": [[{ "node": "Log Touch", "type": "main", "index": 0 }]] },
+    "Log Touch": { "main": [[{ "node": "Update Sequence State", "type": "main", "index": 0 }]] },
+    "Update Sequence State": { "main": [[{ "node": "Loop Contacts", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
+  "active": false
+}

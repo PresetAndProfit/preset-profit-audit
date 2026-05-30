@@ -18,7 +18,7 @@ Every automation in this catalog is built to be sold, installed, and supported a
 | 07 | AI Receptionist (24/7 Voice + Chat) | $1,500–3,000 | $797–1,500 | 3–5 days | ✅ |
 | 08 | Referral Generator Engine | $500–750 | $247 | 0.5 day | ✅ |
 | 09 | Invoice & Payment Reminder (AR) | $500–800 | $297 | 0.5–1 day | ✅ |
-| 10 | Long-Term Nurture & Newsletter Engine | $750–1,000 | $347 | 1 day | 🟡 |
+| 10 | Long-Term Nurture & Newsletter Engine | $750–1,000 | $347 | 1 day | ✅ |
 
 **Bundle play:** package 01 + 02 + 03 as the **"Never Lose a Lead" suite** — $1,500 setup / $897/mo. Most local businesses need all three.
 
@@ -116,14 +116,15 @@ Every automation in this catalog is built to be sold, installed, and supported a
 - **Bundle opportunities:** pairs with **#04 Appointment Reminders** as the operational "get-paid + show-up" pack; cross-sells with the reactivation/review automations.
 - **Folder:** [`09-invoice-payment-reminder/`](09-invoice-payment-reminder/README.md)
 
-## 10 — Long-Term Nurture & Newsletter Engine 🟡
-- **Problem solved:** Leads not ready today get forgotten. This keeps the business top-of-mind with AI-generated seasonal/maintenance SMS + email touches.
+## 10 — Long-Term Nurture & Newsletter Engine ✅
+- **Problem solved:** Leads not ready today get forgotten. This keeps the business top-of-mind with AI-generated seasonal/maintenance SMS + email touches, then pauses the drip and hands the owner a hot lead the moment a contact replies with intent.
 - **Ideal customer:** Seasonal/recurring-need businesses — HVAC (seasonal tune-ups), dentists (6-mo recall), salons, real estate (market updates).
 - **Setup fee:** $750–1,000
 - **Monthly fee:** $347
 - **ROI:** Recurring touches drive repeat/seasonal jobs that would otherwise go to competitors; one HVAC tune-up season can book dozens of jobs from the existing list. **High lifetime-value multiplier.**
 - **Required integrations:** n8n, Twilio, OpenAI, Gmail/email platform, Google Sheets/CRM.
 - **Estimated implementation time:** 1 day.
+- **Bundle opportunities:** the long-term half of the **"growth flywheel"** — **#05 Database Reactivation** wakes the list, #10 keeps it warm forever, and **#03 Reviews** + **#08 Referrals** compound the relationships.
 - **Folder:** [`10-nurture-newsletter-engine/`](10-nurture-newsletter-engine/README.md)
 
 ---

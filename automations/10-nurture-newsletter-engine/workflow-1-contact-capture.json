@@ -1,0 +1,376 @@
+{
+  "name": "P&P – Long-Term Nurture & Newsletter (Capture & Intake)",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "contact-intake", "responseMode": "responseNode", "options": {} },
+      "id": "node-webhook",
+      "name": "Contact Intake Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-1160, 380],
+      "webhookId": "contact-intake"
+    },
+    {
+      "parameters": { "respondWith": "json", "responseBody": "={{ { \"status\": \"received\" } }}", "options": {} },
+      "id": "node-respond",
+      "name": "Respond to Source",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [-920, 600]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": { "options": { "caseSensitive": false, "typeValidation": "loose" }, "conditions": [ { "leftValue": "={{ $json.body.MessageSid }}", "rightValue": "", "operator": { "type": "string", "operation": "notEmpty" } } ], "combinator": "and" },
+              "outputKey": "SMS Reply"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "node-switch",
+      "name": "Route Event",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [-920, 380]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize a contact from any source: CRM, Jobber, ServiceTitan, Housecall Pro, GoHighLevel,\n// a completed job, a lead form, or a sheet/manual add. Dedup key = Contact_ID.\nconst b = $json.body || {};\nconst q = $json.query || {};\nconst nests = [b, b.data, b.contact, b.customer, b.client, b.object, q].filter(Boolean);\nconst pick = (...keys) => { for (const src of nests) { for (const k of keys) { const v = src && src[k]; if (v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim(); } } return ''; };\nlet name = pick('customer_name','customerName','client_name','name','full_name','contact_name');\nconst first = pick('first_name','firstName'); const last = pick('last_name','lastName');\nif (!name && (first || last)) name = `${first} ${last}`.trim();\nlet phone = pick('phone','phone_number','phoneNumber','mobile','cell');\nconst digits = phone.replace(/[^0-9]/g, '');\nif (digits.length === 10) phone = '+1' + digits; else if (digits.length === 11 && digits.startsWith('1')) phone = '+' + digits; else if (phone && !phone.startsWith('+')) phone = digits ? '+' + digits : '';\nconst email = pick('email','customer_email','email_address','contact_email');\nconst segment = pick('segment','tags','tag','list','type','customer_type','category');\nconst lastService = pick('last_service','service','service_type','job_type','last_job','service_name','plan');\nconst lastServiceDate = pick('service_date','completed_at','last_service_date','job_date','date');\nconst source = pick('source','provider','integration') || q.source || 'Webhook';\nconst extId = pick('contact_id','contactId','id','customer_id','Id');\nconst contactId = extId ? `${source}-${extId}` : (digits ? `C-${digits.slice(-10)}` : (email ? `C-${email.toLowerCase()}` : `${$now.toMillis()}`));\n// First touch starts after a short delay; the recurring cadence (NURTURE_INTERVAL_DAYS) takes over from there.\nconst firstDays = Number($env.NURTURE_FIRST_TOUCH_DAYS || 3);\nconst nextTouch = new Date($now.toMillis() + firstDays * 86400000).toISOString();\nreturn [{ json: { contact_id: contactId, name, phone, email, segment, last_service: lastService, last_service_date: lastServiceDate, source, next_touch_at: nextTouch, received_at: $now.toISO() } }];"
+      },
+      "id": "node-normalize",
+      "name": "Normalize Contact",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-660, 180]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_CONTACTS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Contacts", "mode": "name" },
+        "filtersUI": { "values": [ { "lookupColumn": "Contact_ID", "lookupValue": "={{ $json.contact_id }}" } ] },
+        "options": {}
+      },
+      "id": "node-find",
+      "name": "Find Existing Contact",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-420, 180],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": { "options": { "typeValidation": "loose" }, "conditions": [ { "leftValue": "={{ $json.Contact_ID }}", "rightValue": "", "operator": { "type": "string", "operation": "empty" } } ], "combinator": "and" },
+        "options": {}
+      },
+      "id": "node-is-new",
+      "name": "Is New Contact?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-180, 180]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_CONTACTS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Contacts", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Contact_ID": "={{ $('Normalize Contact').item.json.contact_id }}",
+            "Created_At": "={{ $('Normalize Contact').item.json.received_at }}",
+            "Customer_Name": "={{ $('Normalize Contact').item.json.name }}",
+            "Customer_Phone": "={{ $('Normalize Contact').item.json.phone }}",
+            "Customer_Email": "={{ $('Normalize Contact').item.json.email }}",
+            "Segment": "={{ $('Normalize Contact').item.json.segment }}",
+            "Last_Service": "={{ $('Normalize Contact').item.json.last_service }}",
+            "Last_Service_Date": "={{ $('Normalize Contact').item.json.last_service_date }}",
+            "Source": "={{ $('Normalize Contact').item.json.source }}",
+            "Status": "Subscribed",
+            "Touch_Count": "0",
+            "Sequence_Active": "Yes",
+            "Next_Touch_At": "={{ $('Normalize Contact').item.json.next_touch_at }}",
+            "Opted_Out": "No",
+            "Owner_Notified": "No"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-log",
+      "name": "Log New Contact",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [80, 60],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_CONTACTS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Status_History", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Contact_ID": "={{ $('Normalize Contact').item.json.contact_id }}",
+            "Changed_At": "={{ $now.toISO() }}",
+            "Old_Status": "",
+            "New_Status": "Subscribed",
+            "Changed_By": "={{ $('Normalize Contact').item.json.source }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-status-new",
+      "name": "Record Status (New)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [320, 60],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_CONTACTS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Contacts", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Contact_ID"],
+          "value": {
+            "Contact_ID": "={{ $('Normalize Contact').item.json.contact_id }}",
+            "Customer_Name": "={{ $('Normalize Contact').item.json.name }}",
+            "Customer_Email": "={{ $('Normalize Contact').item.json.email }}",
+            "Segment": "={{ $('Normalize Contact').item.json.segment }}",
+            "Last_Service": "={{ $('Normalize Contact').item.json.last_service }}",
+            "Last_Service_Date": "={{ $('Normalize Contact').item.json.last_service_date }}",
+            "Last_Source_Update_At": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-update-existing",
+      "name": "Update Existing Contact",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [80, 300],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "assignments": { "assignments": [
+          { "id": "r1", "name": "customer_phone", "value": "={{ $json.body.From }}", "type": "string" },
+          { "id": "r2", "name": "message_body", "value": "={{ $json.body.Body }}", "type": "string" },
+          { "id": "r3", "name": "message_sid", "value": "={{ $json.body.MessageSid }}", "type": "string" }
+        ] },
+        "options": {}
+      },
+      "id": "node-normalize-reply",
+      "name": "Normalize Reply",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-660, 620]
+    },
+    {
+      "parameters": {
+        "conditions": { "options": { "caseSensitive": false, "typeValidation": "loose" }, "conditions": [ { "leftValue": "={{ $json.message_body }}", "rightValue": "^\\s*(stop|stopall|unsubscribe|cancel|end|quit|optout|opt out|remove)\\s*$", "operator": { "type": "string", "operation": "regex" } } ], "combinator": "and" },
+        "options": {}
+      },
+      "id": "node-is-stop",
+      "name": "Is Opt-Out?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-420, 620]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_CONTACTS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Contacts", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Customer_Phone"],
+          "value": {
+            "Customer_Phone": "={{ $json.customer_phone }}",
+            "Opted_Out": "Yes",
+            "Sequence_Active": "No",
+            "Last_Inbound_At": "={{ $now.toISO() }}",
+            "Status": "Unsubscribed"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-suppress",
+      "name": "Suppress (Opt-Out)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-180, 520],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_CONTACTS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Opt_Outs", "mode": "name" },
+        "columns": { "mappingMode": "defineBelow", "value": {
+          "Customer_Phone": "={{ $json.customer_phone }}",
+          "Opted_Out_At": "={{ $now.toISO() }}",
+          "Source": "SMS STOP"
+        } },
+        "options": {}
+      },
+      "id": "node-logoptout",
+      "name": "Log Opt-Out",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [80, 520],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_CONTACTS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Contacts", "mode": "name" },
+        "filtersUI": { "values": [ { "lookupColumn": "Customer_Phone", "lookupValue": "={{ $json.customer_phone }}" } ] },
+        "options": {}
+      },
+      "id": "node-find-reply",
+      "name": "Find Contact (Reply)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-180, 760],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "modelId": { "__rl": true, "value": "gpt-4o-mini", "mode": "list" },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "=You analyze a customer's SMS reply to a friendly nurture/check-in message from {{ $env.BUSINESS_NAME }}, a {{ $env.BUSINESS_INDUSTRY }} business. Their segment/notes: {{ $('Find Contact (Reply)').first().json.Segment || 'general' }}. Return STRICT JSON only. Schema: {\"class\":\"BOOK|INTERESTED|QUESTION|NOT_NOW|UNSUBSCRIBE|GENERAL\",\"sentiment\":\"positive|neutral|negative\",\"wants_service\":true|false,\"summary\":\"one sentence for the owner\",\"suggested_reply\":\"warm, helpful, 1-2 sentence SMS under 300 chars. If BOOK or INTERESTED, be enthusiastic and say someone from the team will reach out to help/schedule. If QUESTION, answer helpfully or say the team will follow up. If NOT_NOW, be gracious and say we'll stay in touch. NEVER invent prices, discounts, dates, or guarantees.\"}. No text outside the JSON object."
+            },
+            { "role": "user", "content": "=Customer reply: \"{{ $('Normalize Reply').item.json.message_body }}\"" }
+          ]
+        },
+        "jsonOutput": true,
+        "options": { "temperature": 0.3 }
+      },
+      "id": "node-classify",
+      "name": "Classify Reply (AI)",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [120, 760],
+      "credentials": { "openAiApi": { "id": "OPENAI_CRED", "name": "P&P OpenAI" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ai = $('Classify Reply (AI)').first().json.message?.content ?? $('Classify Reply (AI)').first().json;\nlet p;\ntry { p = typeof ai === 'string' ? JSON.parse(ai) : ai; }\ncatch (e) { p = { class:'GENERAL', sentiment:'neutral', wants_service:false, summary:'Could not parse AI output', suggested_reply:'Thanks for getting back to us — a team member will follow up shortly!' }; }\nconst r = $('Normalize Reply').item.json;\nconst c = $('Find Contact (Reply)').first().json || {};\nconst cls = String(p.class || 'GENERAL').toUpperCase();\nconst convo = ((c.Conversation || '') + `\\nIN: ${r.message_body}\\nOUT: ${p.suggested_reply}`).trim();\nconst unsub = cls === 'UNSUBSCRIBE';\nconst hot = cls === 'BOOK' || cls === 'INTERESTED' || p.wants_service === true;\nconst statusMap = { BOOK:'Re-Engaged - Hot Lead', INTERESTED:'Re-Engaged - Interested', QUESTION:'Replied - Question', NOT_NOW:'Replied - Not Now', UNSUBSCRIBE:'Unsubscribed', GENERAL:'Replied - General' };\n// A hot re-engagement pauses the nurture drip (they're now a live lead for the owner); unsubscribe stops it permanently.\nconst sequence_active = (hot || unsub) ? 'No' : 'Yes';\nconst opted_out = unsub ? 'Yes' : (String(c.Opted_Out || 'No'));\nconst wants_contact = /call me|contact me|reach me|call back|text me/i.test(r.message_body || '');\nconst alert_owner = hot || wants_contact;\nreturn [{ json: { class: cls, sentiment: p.sentiment || 'neutral', hot, unsub, wants_service: !!p.wants_service, summary: p.summary || '', suggested_reply: p.suggested_reply || 'Thanks for your reply!', customer_phone: r.customer_phone, message_body: r.message_body, customer_name: c.Customer_Name || '', segment: c.Segment || '', conversation: convo, new_status: statusMap[cls] || 'Replied - General', sequence_active, opted_out, alert_owner } }];"
+      },
+      "id": "node-parse-reply",
+      "name": "Parse Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [360, 760]
+    },
+    {
+      "parameters": {
+        "resource": "sms", "operation": "send",
+        "from": "={{ $env.TWILIO_NUMBER }}",
+        "to": "={{ $json.customer_phone }}",
+        "message": "={{ $json.suggested_reply }}",
+        "options": {}
+      },
+      "id": "node-reply-sms",
+      "name": "Send AI Reply",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [600, 760],
+      "credentials": { "twilioApi": { "id": "TWILIO_CRED", "name": "P&P Twilio" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_CONTACTS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Contacts", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Customer_Phone"],
+          "value": {
+            "Customer_Phone": "={{ $json.customer_phone }}",
+            "Last_Inbound_At": "={{ $now.toISO() }}",
+            "Last_Outbound_At": "={{ $now.toISO() }}",
+            "Conversation": "={{ $json.conversation }}",
+            "AI_Class": "={{ $json.class }}",
+            "AI_Summary": "={{ $json.summary }}",
+            "Opted_Out": "={{ $json.opted_out }}",
+            "Sequence_Active": "={{ $json.sequence_active }}",
+            "Status": "={{ $json.new_status }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-update-reply",
+      "name": "Update Contact (Reply)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [600, 940],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "conditions": { "options": { "typeValidation": "loose" }, "conditions": [ { "leftValue": "={{ $('Parse Reply').item.json.alert_owner }}", "rightValue": "true", "operator": { "type": "boolean", "operation": "true", "singleValue": true } } ], "combinator": "and" },
+        "options": {}
+      },
+      "id": "node-if-alert",
+      "name": "Owner Alert Needed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [840, 940]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.OWNER_EMAIL }}",
+        "subject": "=🔥 Re-engaged from nurture – {{ $('Parse Reply').item.json.customer_name || $('Parse Reply').item.json.customer_phone }} ({{ $('Parse Reply').item.json.class }})",
+        "emailType": "text",
+        "message": "=A nurtured contact just replied with interest:\n\nName: {{ $('Parse Reply').item.json.customer_name }}\nPhone: {{ $('Parse Reply').item.json.customer_phone }}\nSegment: {{ $('Parse Reply').item.json.segment }}\n\nClassification: {{ $('Parse Reply').item.json.class }}\nWants service: {{ $('Parse Reply').item.json.wants_service }}\nSummary: {{ $('Parse Reply').item.json.summary }}\n\nThey said: \"{{ $('Parse Reply').item.json.message_body }}\"\n\nWe auto-replied: \"{{ $('Parse Reply').item.json.suggested_reply }}\"\n\nNurture is paused for this contact — follow up personally to book them.",
+        "options": {}
+      },
+      "id": "node-alert-owner",
+      "name": "Alert Owner (Re-Engaged)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1080, 940],
+      "credentials": { "gmailOAuth2": { "id": "GMAIL_CRED", "name": "P&P Gmail" } },
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Contact Intake Webhook": { "main": [[{ "node": "Respond to Source", "type": "main", "index": 0 }, { "node": "Route Event", "type": "main", "index": 0 }]] },
+    "Route Event": {
+      "main": [
+        [{ "node": "Normalize Reply", "type": "main", "index": 0 }],
+        [{ "node": "Normalize Contact", "type": "main", "index": 0 }]
+      ]
+    },
+    "Normalize Contact": { "main": [[{ "node": "Find Existing Contact", "type": "main", "index": 0 }]] },
+    "Find Existing Contact": { "main": [[{ "node": "Is New Contact?", "type": "main", "index": 0 }]] },
+    "Is New Contact?": { "main": [[{ "node": "Log New Contact", "type": "main", "index": 0 }], [{ "node": "Update Existing Contact", "type": "main", "index": 0 }]] },
+    "Log New Contact": { "main": [[{ "node": "Record Status (New)", "type": "main", "index": 0 }]] },
+    "Normalize Reply": { "main": [[{ "node": "Is Opt-Out?", "type": "main", "index": 0 }]] },
+    "Is Opt-Out?": { "main": [[{ "node": "Suppress (Opt-Out)", "type": "main", "index": 0 }], [{ "node": "Find Contact (Reply)", "type": "main", "index": 0 }]] },
+    "Suppress (Opt-Out)": { "main": [[{ "node": "Log Opt-Out", "type": "main", "index": 0 }]] },
+    "Find Contact (Reply)": { "main": [[{ "node": "Classify Reply (AI)", "type": "main", "index": 0 }]] },
+    "Classify Reply (AI)": { "main": [[{ "node": "Parse Reply", "type": "main", "index": 0 }]] },
+    "Parse Reply": { "main": [[{ "node": "Send AI Reply", "type": "main", "index": 0 }]] },
+    "Send AI Reply": { "main": [[{ "node": "Update Contact (Reply)", "type": "main", "index": 0 }]] },
+    "Update Contact (Reply)": { "main": [[{ "node": "Owner Alert Needed?", "type": "main", "index": 0 }]] },
+    "Owner Alert Needed?": { "main": [[{ "node": "Alert Owner (Re-Engaged)", "type": "main", "index": 0 }], []] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true, "callerPolicy": "workflowsFromSameOwner" },
+  "active": false
+}

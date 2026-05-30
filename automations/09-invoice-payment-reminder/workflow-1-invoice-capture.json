@@ -1,0 +1,504 @@
+{
+  "name": "P&P – Invoice & Payment Reminder (Capture & Intake)",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "invoice-intake", "responseMode": "responseNode", "options": {} },
+      "id": "node-webhook",
+      "name": "Invoice Intake Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-1160, 380],
+      "webhookId": "invoice-intake"
+    },
+    {
+      "parameters": { "respondWith": "json", "responseBody": "={{ { \"status\": \"received\" } }}", "options": {} },
+      "id": "node-respond",
+      "name": "Respond to Source",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [-920, 600]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": { "options": { "caseSensitive": false, "typeValidation": "loose" }, "conditions": [ { "leftValue": "={{ $json.body.MessageSid }}", "rightValue": "", "operator": { "type": "string", "operation": "notEmpty" } } ], "combinator": "and" },
+              "outputKey": "SMS Reply"
+            },
+            {
+              "conditions": { "options": { "caseSensitive": false, "typeValidation": "loose" }, "conditions": [ { "leftValue": "={{ ($json.body.event || $json.query.event || '').toString().toLowerCase() }}", "rightValue": "paid|payment|payment_received|paid_in_full", "operator": { "type": "string", "operation": "regex" } } ], "combinator": "and" },
+              "outputKey": "Payment Event"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "node-switch",
+      "name": "Route Event",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [-920, 380]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize an invoice from any source: QuickBooks, Stripe, Square, Jobber, CRM, Sheet, manual.\nconst b = $json.body || {};\nconst q = $json.query || {};\nconst nests = [b, b.data, b.invoice, b.object, b.customer, b.client, q].filter(Boolean);\nconst pick = (...keys) => { for (const src of nests) { for (const k of keys) { const v = src && src[k]; if (v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim(); } } return ''; };\nconst num = v => Number(String(v).replace(/[^0-9.]/g, '')) || 0;\nlet name = pick('customer_name','customerName','client_name','name','customer','bill_to');\nconst first = pick('first_name','firstName'); const last = pick('last_name','lastName');\nif (!name && (first || last)) name = `${first} ${last}`.trim();\nlet phone = pick('phone','phone_number','phoneNumber','mobile','cell');\nconst digits = phone.replace(/[^0-9]/g, '');\nif (digits.length === 10) phone = '+1' + digits; else if (digits.length === 11 && digits.startsWith('1')) phone = '+' + digits; else if (phone && !phone.startsWith('+')) phone = digits ? '+' + digits : '';\nconst email = pick('email','customer_email','email_address','BillEmail','receiver_email');\nconst invNo = pick('invoice_number','number','DocNumber','invoiceNumber','doc_number');\nconst amount = num(pick('amount','total','TotalAmt','amount_due','total_amount','grand_total','balance_due') || '0');\nconst amountPaid = num(pick('amount_paid','AmountPaid','paid') || '0');\nlet balance = num(pick('balance','Balance','amount_remaining','balance_due') || '');\nif (!balance) balance = Math.max(0, amount - amountPaid);\n// Due date: accept ISO or unix seconds.\nlet dueRaw = pick('due_date','DueDate','dueDate','due','duedate');\nlet dueMs = NaN;\nif (/^\\d{9,11}$/.test(dueRaw)) dueMs = Number(dueRaw) * 1000; else if (dueRaw) dueMs = new Date(dueRaw).getTime();\nconst dueISO = isNaN(dueMs) ? '' : new Date(dueMs).toISOString().slice(0,10);\nconst issue = pick('issue_date','TxnDate','created','issued_at','date');\nconst payLink = pick('pay_link','hosted_invoice_url','public_url','invoice_url','payment_url','paymentLink');\nconst status = pick('status','stage');\nconst source = pick('source','provider','integration') || q.source || 'Webhook';\nconst extId = pick('invoice_id','invoiceId','id','Id');\nconst invoiceId = extId ? `${source}-${extId}` : (invNo ? `${source}-${invNo}` : (digits ? `${digits.slice(-10)}-${Math.round(amount)}` : `${$now.toMillis()}`));\n// First reminder = Due_Date + first offset (REMINDER_DAYS[0]); if no due date, start now.\nconst offsets = (($env.REMINDER_DAYS || '0,3,7,14').split(',')).map(n => Number(n.trim()));\nconst baseMs = isNaN(dueMs) ? $now.toMillis() : dueMs;\nconst nextReminder = new Date(baseMs + (offsets[0] || 0) * 86400000).toISOString();\nreturn [{ json: { invoice_id: invoiceId, name, phone, email, invoice_number: invNo, amount, amount_paid: amountPaid, balance, issue_date: issue, due_date: dueISO, pay_link: payLink, source, source_status: status, next_reminder_at: nextReminder, received_at: $now.toISO() } }];"
+      },
+      "id": "node-normalize",
+      "name": "Normalize Invoice",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-660, 180]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_INVOICES_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Invoices", "mode": "name" },
+        "filtersUI": { "values": [ { "lookupColumn": "Invoice_ID", "lookupValue": "={{ $json.invoice_id }}" } ] },
+        "options": {}
+      },
+      "id": "node-find",
+      "name": "Find Existing Invoice",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-420, 180],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": { "options": { "typeValidation": "loose" }, "conditions": [ { "leftValue": "={{ $json.Invoice_ID }}", "rightValue": "", "operator": { "type": "string", "operation": "empty" } } ], "combinator": "and" },
+        "options": {}
+      },
+      "id": "node-is-new",
+      "name": "Is New Invoice?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-180, 180]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_INVOICES_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Invoices", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Invoice_ID": "={{ $('Normalize Invoice').item.json.invoice_id }}",
+            "Created_At": "={{ $('Normalize Invoice').item.json.received_at }}",
+            "Customer_Name": "={{ $('Normalize Invoice').item.json.name }}",
+            "Customer_Phone": "={{ $('Normalize Invoice').item.json.phone }}",
+            "Customer_Email": "={{ $('Normalize Invoice').item.json.email }}",
+            "Invoice_Number": "={{ $('Normalize Invoice').item.json.invoice_number }}",
+            "Amount": "={{ $('Normalize Invoice').item.json.amount }}",
+            "Amount_Paid": "={{ $('Normalize Invoice').item.json.amount_paid }}",
+            "Balance": "={{ $('Normalize Invoice').item.json.balance }}",
+            "Issue_Date": "={{ $('Normalize Invoice').item.json.issue_date }}",
+            "Due_Date": "={{ $('Normalize Invoice').item.json.due_date }}",
+            "Pay_Link": "={{ $('Normalize Invoice').item.json.pay_link }}",
+            "Source": "={{ $('Normalize Invoice').item.json.source }}",
+            "Status": "Open - Reminders Scheduled",
+            "Reminder_Step": "0",
+            "Sequence_Active": "Yes",
+            "Next_Reminder_At": "={{ $('Normalize Invoice').item.json.next_reminder_at }}",
+            "Disputed": "No",
+            "Opted_Out": "No",
+            "Owner_Notified": "No"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-log",
+      "name": "Log New Invoice",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [80, 60],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_INVOICES_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Status_History", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Invoice_ID": "={{ $('Normalize Invoice').item.json.invoice_id }}",
+            "Changed_At": "={{ $now.toISO() }}",
+            "Old_Status": "",
+            "New_Status": "Open - Reminders Scheduled",
+            "Changed_By": "={{ $('Normalize Invoice').item.json.source }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-status-new",
+      "name": "Record Status (New)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [320, 60],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "conditions": { "options": { "typeValidation": "loose" }, "conditions": [ { "leftValue": "={{ Number($('Normalize Invoice').item.json.balance) }}", "rightValue": "={{ Number($env.HIGH_VALUE_INVOICE || 2500) }}", "operator": { "type": "number", "operation": "gte" } } ], "combinator": "and" },
+        "options": {}
+      },
+      "id": "node-is-highvalue",
+      "name": "High-Value Invoice?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [560, 60]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.OWNER_EMAIL }}",
+        "subject": "=🧾 High-value invoice in collections – {{ $('Normalize Invoice').item.json.name || $('Normalize Invoice').item.json.phone }} (${{ $('Normalize Invoice').item.json.balance }})",
+        "emailType": "text",
+        "message": "=A high-value invoice was just logged into the reminder sequence:\n\nCustomer: {{ $('Normalize Invoice').item.json.name }}\nInvoice #: {{ $('Normalize Invoice').item.json.invoice_number }}\nBalance: ${{ $('Normalize Invoice').item.json.balance }}\nDue: {{ $('Normalize Invoice').item.json.due_date || 'n/a' }}\nSource: {{ $('Normalize Invoice').item.json.source }}\n\nAutomated reminders are now scheduled. Consider a personal touch on this one.",
+        "options": {}
+      },
+      "id": "node-alert-new",
+      "name": "Alert Owner (High-Value)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [800, 60],
+      "credentials": { "gmailOAuth2": { "id": "GMAIL_CRED", "name": "P&P Gmail" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_INVOICES_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Invoices", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Invoice_ID"],
+          "value": {
+            "Invoice_ID": "={{ $('Normalize Invoice').item.json.invoice_id }}",
+            "Amount": "={{ $('Normalize Invoice').item.json.amount }}",
+            "Amount_Paid": "={{ $('Normalize Invoice').item.json.amount_paid }}",
+            "Balance": "={{ $('Normalize Invoice').item.json.balance }}",
+            "Due_Date": "={{ $('Normalize Invoice').item.json.due_date }}",
+            "Pay_Link": "={{ $('Normalize Invoice').item.json.pay_link }}",
+            "Status": "={{ Number($('Normalize Invoice').item.json.balance) <= 0 ? 'Paid' : 'Open - Reminders Scheduled' }}",
+            "Sequence_Active": "={{ Number($('Normalize Invoice').item.json.balance) <= 0 ? 'No' : 'Yes' }}",
+            "Last_Source_Update_At": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-update-existing",
+      "name": "Update Existing Invoice",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [80, 300],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_INVOICES_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Invoices", "mode": "name" },
+        "filtersUI": { "values": [ { "lookupColumn": "Invoice_ID", "lookupValue": "={{ ($json.body.source || 'Webhook') + '-' + ($json.body.invoice_id || $json.body.id || $json.query.invoice_id) }}" } ] },
+        "options": {}
+      },
+      "id": "node-find-payment",
+      "name": "Find Invoice (Payment)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-660, 420],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_INVOICES_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Invoices", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Invoice_ID"],
+          "value": {
+            "Invoice_ID": "={{ $('Find Invoice (Payment)').first().json.Invoice_ID }}",
+            "Status": "Paid",
+            "Sequence_Active": "No",
+            "Balance": "0",
+            "Amount_Paid": "={{ $('Find Invoice (Payment)').first().json.Amount }}",
+            "Paid_At": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-mark-paid",
+      "name": "Mark Paid",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-420, 420],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_INVOICES_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Payments", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Invoice_ID": "={{ $('Find Invoice (Payment)').first().json.Invoice_ID }}",
+            "Paid_At": "={{ $now.toISO() }}",
+            "Amount": "={{ $('Find Invoice (Payment)').first().json.Amount }}",
+            "Customer_Phone": "={{ $('Find Invoice (Payment)').first().json.Customer_Phone }}",
+            "Source": "Payment Webhook"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-log-payment",
+      "name": "Log Payment",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-180, 420],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $env.TWILIO_NUMBER }}",
+        "to": "={{ $('Find Invoice (Payment)').first().json.Customer_Phone }}",
+        "message": "=Thank you! We've received your payment for invoice {{ $('Find Invoice (Payment)').first().json.Invoice_Number }}. We appreciate your business — {{ $env.BUSINESS_NAME }}.",
+        "options": {}
+      },
+      "id": "node-receipt-sms",
+      "name": "Send Receipt SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [60, 420],
+      "credentials": { "twilioApi": { "id": "TWILIO_CRED", "name": "P&P Twilio" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "assignments": { "assignments": [
+          { "id": "r1", "name": "customer_phone", "value": "={{ $json.body.From }}", "type": "string" },
+          { "id": "r2", "name": "message_body", "value": "={{ $json.body.Body }}", "type": "string" },
+          { "id": "r3", "name": "message_sid", "value": "={{ $json.body.MessageSid }}", "type": "string" }
+        ] },
+        "options": {}
+      },
+      "id": "node-normalize-reply",
+      "name": "Normalize Reply",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-660, 660]
+    },
+    {
+      "parameters": {
+        "conditions": { "options": { "caseSensitive": false, "typeValidation": "loose" }, "conditions": [ { "leftValue": "={{ $json.message_body }}", "rightValue": "^\\s*(stop|stopall|unsubscribe|cancel|end|quit|optout|opt out)\\s*$", "operator": { "type": "string", "operation": "regex" } } ], "combinator": "and" },
+        "options": {}
+      },
+      "id": "node-is-stop",
+      "name": "Is Opt-Out?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-420, 660]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_INVOICES_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Invoices", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Customer_Phone"],
+          "value": {
+            "Customer_Phone": "={{ $json.customer_phone }}",
+            "Opted_Out": "Yes",
+            "Sequence_Active": "No",
+            "Last_Inbound_At": "={{ $now.toISO() }}",
+            "Status": "Reminders Stopped - Opted Out"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-suppress",
+      "name": "Suppress (Opt-Out)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-180, 560],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_INVOICES_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Opt_Outs", "mode": "name" },
+        "columns": { "mappingMode": "defineBelow", "value": {
+          "Customer_Phone": "={{ $json.customer_phone }}",
+          "Opted_Out_At": "={{ $now.toISO() }}",
+          "Source": "SMS STOP"
+        } },
+        "options": {}
+      },
+      "id": "node-logoptout",
+      "name": "Log Opt-Out",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [60, 560],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_INVOICES_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Invoices", "mode": "name" },
+        "filtersUI": { "values": [ { "lookupColumn": "Customer_Phone", "lookupValue": "={{ $json.customer_phone }}" } ] },
+        "options": {}
+      },
+      "id": "node-find-reply",
+      "name": "Find Invoice (Reply)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-180, 760],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "modelId": { "__rl": true, "value": "gpt-4o-mini", "mode": "list" },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "=You analyze a customer's SMS reply to a payment reminder from {{ $env.BUSINESS_NAME }}, a {{ $env.BUSINESS_INDUSTRY }} business. The outstanding balance is ${{ $('Find Invoice (Reply)').first().json.Balance || 'unknown' }} on invoice {{ $('Find Invoice (Reply)').first().json.Invoice_Number || '' }}. Return STRICT JSON only. Schema: {\"class\":\"PAID|DISPUTE|PROMISE_TO_PAY|QUESTION|STOP|GENERAL\",\"sentiment\":\"positive|neutral|negative\",\"disputed\":true|false,\"promise_to_pay\":true|false,\"summary\":\"one sentence for the owner\",\"suggested_reply\":\"professional, courteous, firm-but-respectful 1-2 sentence SMS under 300 chars. If PAID, thank them and say we'll confirm on our end. If DISPUTE, apologize and say the owner will personally review — never argue. If PROMISE_TO_PAY, thank them and confirm. Share the pay link when helpful: {{ $('Find Invoice (Reply)').first().json.Pay_Link }}. NEVER threaten, never mention legal action, never add late fees or interest unless this exact text is provided: {{ $env.LATE_FEE_TEXT }}.\"}. No text outside the JSON object."
+            },
+            { "role": "user", "content": "=Customer reply: \"{{ $('Normalize Reply').item.json.message_body }}\"" }
+          ]
+        },
+        "jsonOutput": true,
+        "options": { "temperature": 0.3 }
+      },
+      "id": "node-classify",
+      "name": "Classify Reply (AI)",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [120, 760],
+      "credentials": { "openAiApi": { "id": "OPENAI_CRED", "name": "P&P OpenAI" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ai = $('Classify Reply (AI)').first().json.message?.content ?? $('Classify Reply (AI)').first().json;\nlet p;\ntry { p = typeof ai === 'string' ? JSON.parse(ai) : ai; }\ncatch (e) { p = { class:'GENERAL', sentiment:'neutral', disputed:false, promise_to_pay:false, summary:'Could not parse AI output', suggested_reply:'Thanks for your reply — a team member will follow up shortly.' }; }\nconst r = $('Normalize Reply').item.json;\nconst c = $('Find Invoice (Reply)').first().json || {};\nconst cls = String(p.class || 'GENERAL').toUpperCase();\nconst convo = ((c.Conversation || '') + `\\nIN: ${r.message_body}\\nOUT: ${p.suggested_reply}`).trim();\nconst paid = cls === 'PAID';\nconst disputed = cls === 'DISPUTE' || p.disputed === true;\nconst promise = cls === 'PROMISE_TO_PAY' || p.promise_to_pay === true;\nconst statusMap = { PAID:'Paid - Reported', DISPUTE:'Disputed', PROMISE_TO_PAY:'Promised to Pay', QUESTION:'Replied - Question', STOP:'Reminders Stopped - Opted Out', GENERAL:'Replied - General' };\n// Paid (self-report) and dispute STOP the sequence; promise SNOOZES it; others keep it running.\nconst sequence_active = (paid || disputed) ? 'No' : 'Yes';\nconst snoozeDays = Number($env.PROMISE_SNOOZE_DAYS || 5);\nconst next_reminder_at = promise ? $now.plus({ minutes: snoozeDays * 1440 }).toISO() : (c.Next_Reminder_At || '');\nconst wants_contact = /call me|contact me|reach me|call back/i.test(r.message_body || '');\nconst alert_owner = paid || disputed || promise || wants_contact;\nreturn [{ json: { class: cls, sentiment: p.sentiment || 'neutral', disputed, promise, paid, summary: p.summary || '', suggested_reply: p.suggested_reply || 'Thank you!', customer_phone: r.customer_phone, message_body: r.message_body, customer_name: c.Customer_Name || '', balance: c.Balance || '', invoice_number: c.Invoice_Number || '', conversation: convo, new_status: statusMap[cls] || 'Replied - General', sequence_active, next_reminder_at, alert_owner } }];"
+      },
+      "id": "node-parse-reply",
+      "name": "Parse Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [360, 760]
+    },
+    {
+      "parameters": {
+        "resource": "sms", "operation": "send",
+        "from": "={{ $env.TWILIO_NUMBER }}",
+        "to": "={{ $json.customer_phone }}",
+        "message": "={{ $json.suggested_reply }}",
+        "options": {}
+      },
+      "id": "node-reply-sms",
+      "name": "Send AI Reply",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [600, 760],
+      "credentials": { "twilioApi": { "id": "TWILIO_CRED", "name": "P&P Twilio" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_INVOICES_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Invoices", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Customer_Phone"],
+          "value": {
+            "Customer_Phone": "={{ $json.customer_phone }}",
+            "Last_Inbound_At": "={{ $now.toISO() }}",
+            "Last_Outbound_At": "={{ $now.toISO() }}",
+            "Conversation": "={{ $json.conversation }}",
+            "AI_Class": "={{ $json.class }}",
+            "AI_Summary": "={{ $json.summary }}",
+            "Disputed": "={{ $json.disputed ? 'Yes' : 'No' }}",
+            "Next_Reminder_At": "={{ $json.next_reminder_at }}",
+            "Sequence_Active": "={{ $json.sequence_active }}",
+            "Status": "={{ $json.new_status }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-update-reply",
+      "name": "Update Invoice (Reply)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [600, 940],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "conditions": { "options": { "typeValidation": "loose" }, "conditions": [ { "leftValue": "={{ $('Parse Reply').item.json.alert_owner }}", "rightValue": "true", "operator": { "type": "boolean", "operation": "true", "singleValue": true } } ], "combinator": "and" },
+        "options": {}
+      },
+      "id": "node-if-alert",
+      "name": "Owner Alert Needed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [840, 940]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.OWNER_EMAIL }}",
+        "subject": "={{ $('Parse Reply').item.json.disputed ? '⚠️ Invoice disputed – ' : ($('Parse Reply').item.json.paid ? '✅ Payment reported – ' : '💬 Invoice reply – ') }}{{ $('Parse Reply').item.json.customer_name || $('Parse Reply').item.json.customer_phone }} (${{ $('Parse Reply').item.json.balance }})",
+        "emailType": "text",
+        "message": "=A customer replied to a payment reminder:\n\nName: {{ $('Parse Reply').item.json.customer_name }}\nPhone: {{ $('Parse Reply').item.json.customer_phone }}\nInvoice #: {{ $('Parse Reply').item.json.invoice_number }}\nBalance: ${{ $('Parse Reply').item.json.balance }}\n\nClassification: {{ $('Parse Reply').item.json.class }}\nDisputed: {{ $('Parse Reply').item.json.disputed }} | Promise to pay: {{ $('Parse Reply').item.json.promise }} | Paid (reported): {{ $('Parse Reply').item.json.paid }}\nSummary: {{ $('Parse Reply').item.json.summary }}\n\nThey said: \"{{ $('Parse Reply').item.json.message_body }}\"\n\nWe auto-replied: \"{{ $('Parse Reply').item.json.suggested_reply }}\"\n\n{{ $('Parse Reply').item.json.paid ? 'Please confirm the payment on your end and close the invoice.' : ($('Parse Reply').item.json.disputed ? 'Reminders are paused — review the dispute and follow up personally.' : 'Follow up if needed.') }}",
+        "options": {}
+      },
+      "id": "node-alert-owner",
+      "name": "Alert Owner (Reply)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1080, 940],
+      "credentials": { "gmailOAuth2": { "id": "GMAIL_CRED", "name": "P&P Gmail" } },
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Invoice Intake Webhook": { "main": [[{ "node": "Respond to Source", "type": "main", "index": 0 }, { "node": "Route Event", "type": "main", "index": 0 }]] },
+    "Route Event": {
+      "main": [
+        [{ "node": "Normalize Reply", "type": "main", "index": 0 }],
+        [{ "node": "Find Invoice (Payment)", "type": "main", "index": 0 }],
+        [{ "node": "Normalize Invoice", "type": "main", "index": 0 }]
+      ]
+    },
+    "Normalize Invoice": { "main": [[{ "node": "Find Existing Invoice", "type": "main", "index": 0 }]] },
+    "Find Existing Invoice": { "main": [[{ "node": "Is New Invoice?", "type": "main", "index": 0 }]] },
+    "Is New Invoice?": { "main": [[{ "node": "Log New Invoice", "type": "main", "index": 0 }], [{ "node": "Update Existing Invoice", "type": "main", "index": 0 }]] },
+    "Log New Invoice": { "main": [[{ "node": "Record Status (New)", "type": "main", "index": 0 }]] },
+    "Record Status (New)": { "main": [[{ "node": "High-Value Invoice?", "type": "main", "index": 0 }]] },
+    "High-Value Invoice?": { "main": [[{ "node": "Alert Owner (High-Value)", "type": "main", "index": 0 }], []] },
+    "Find Invoice (Payment)": { "main": [[{ "node": "Mark Paid", "type": "main", "index": 0 }]] },
+    "Mark Paid": { "main": [[{ "node": "Log Payment", "type": "main", "index": 0 }]] },
+    "Log Payment": { "main": [[{ "node": "Send Receipt SMS", "type": "main", "index": 0 }]] },
+    "Normalize Reply": { "main": [[{ "node": "Is Opt-Out?", "type": "main", "index": 0 }]] },
+    "Is Opt-Out?": { "main": [[{ "node": "Suppress (Opt-Out)", "type": "main", "index": 0 }], [{ "node": "Find Invoice (Reply)", "type": "main", "index": 0 }]] },
+    "Suppress (Opt-Out)": { "main": [[{ "node": "Log Opt-Out", "type": "main", "index": 0 }]] },
+    "Find Invoice (Reply)": { "main": [[{ "node": "Classify Reply (AI)", "type": "main", "index": 0 }]] },
+    "Classify Reply (AI)": { "main": [[{ "node": "Parse Reply", "type": "main", "index": 0 }]] },
+    "Parse Reply": { "main": [[{ "node": "Send AI Reply", "type": "main", "index": 0 }]] },
+    "Send AI Reply": { "main": [[{ "node": "Update Invoice (Reply)", "type": "main", "index": 0 }]] },
+    "Update Invoice (Reply)": { "main": [[{ "node": "Owner Alert Needed?", "type": "main", "index": 0 }]] },
+    "Owner Alert Needed?": { "main": [[{ "node": "Alert Owner (Reply)", "type": "main", "index": 0 }], []] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true, "callerPolicy": "workflowsFromSameOwner" },
+  "active": false
+}

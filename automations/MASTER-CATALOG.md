@@ -17,7 +17,7 @@ Every automation in this catalog is built to be sold, installed, and supported a
 | 06 | Estimate / Quote Follow-Up Engine | $600–900 | $297 | 0.5–1 day | ✅ |
 | 07 | AI Receptionist (24/7 Voice + Chat) | $1,500–3,000 | $797–1,500 | 3–5 days | ✅ |
 | 08 | Referral Generator Engine | $500–750 | $247 | 0.5 day | ✅ |
-| 09 | Invoice & Payment Reminder (AR) | $500–800 | $297 | 0.5–1 day | 🟡 |
+| 09 | Invoice & Payment Reminder (AR) | $500–800 | $297 | 0.5–1 day | ✅ |
 | 10 | Long-Term Nurture & Newsletter Engine | $750–1,000 | $347 | 1 day | 🟡 |
 
 **Bundle play:** package 01 + 02 + 03 as the **"Never Lose a Lead" suite** — $1,500 setup / $897/mo. Most local businesses need all three.
@@ -105,14 +105,15 @@ Every automation in this catalog is built to be sold, installed, and supported a
 - **Bundle opportunities:** the natural capstone to the **"Never Lose a Lead" suite (#01 + #02 + #03)** — capture, respond, earn the review, then ask the delighted customer for a referral; pairs with **#05 Database Reactivation** (reactivate → delight → refer) as a "growth flywheel."
 - **Folder:** [`08-referral-generator/`](08-referral-generator/README.md)
 
-## 09 — Invoice & Payment Reminder (AR) 🟡
-- **Problem solved:** Unpaid invoices tie up cash. This sends automated, escalating payment reminders with pay-links until invoices are settled.
+## 09 — Invoice & Payment Reminder (AR) ✅
+- **Problem solved:** Unpaid invoices tie up cash. This captures every invoice, sends an escalating-but-respectful SMS/email reminder sequence anchored to the due date (with pay links), AI-classifies replies (PAID/DISPUTE/PROMISE_TO_PAY/…), and stops the instant an invoice is paid or disputed — never threatening, never adding unconfigured fees.
 - **Ideal customer:** Businesses that invoice — contractors, auto repair, B2B services, freelancers/agencies.
 - **Setup fee:** $500–800
 - **Monthly fee:** $297
 - **ROI:** Faster collection of even $3,000–$10,000 in outstanding AR/mo improves cash flow immediately; reduces write-offs. Pays for itself on the first recovered invoice.
-- **Required integrations:** n8n, QuickBooks/Stripe/Square/Jobber, Twilio, Gmail, Google Sheets.
+- **Required integrations:** n8n, QuickBooks/Stripe/Square/Jobber (invoice + payment webhooks), Twilio, Gmail, Google Sheets.
 - **Estimated implementation time:** 0.5–1 day.
+- **Bundle opportunities:** pairs with **#04 Appointment Reminders** as the operational "get-paid + show-up" pack; cross-sells with the reactivation/review automations.
 - **Folder:** [`09-invoice-payment-reminder/`](09-invoice-payment-reminder/README.md)
 
 ## 10 — Long-Term Nurture & Newsletter Engine 🟡

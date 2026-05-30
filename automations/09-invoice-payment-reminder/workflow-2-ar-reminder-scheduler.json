@@ -1,0 +1,158 @@
+{
+  "name": "P&P – Invoice & Payment Reminder (AR Scheduler)",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [ { "field": "minutes", "minutesInterval": 30 } ] } },
+      "id": "node-cron",
+      "name": "Every 30 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-1000, 320]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_INVOICES_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Invoices", "mode": "name" },
+        "options": {}
+      },
+      "id": "node-read",
+      "name": "Read Invoices",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-760, 320],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// AR reminder sequence: escalating touches anchored to Due_Date + REMINDER_DAYS offsets.\n// Stops on paid/disputed/opted-out/inactive. Business-hours + daily-cap gated.\n// Plain Date math (version-safe, no $DateTime).\nconst openH = Number($env.BUSINESS_HOURS_START || 9);\nconst closeH = Number($env.BUSINESS_HOURS_END || 19);\nif (!($now.hour >= openH && $now.hour < closeH)) return []; // quiet/business-hours gate\nconst offsets = (($env.REMINDER_DAYS || '0,3,7,14').split(',')).map(n => Number(n.trim())).filter(n => !isNaN(n));\nconst channels = (($env.REMINDER_CHANNELS || 'sms,email,sms,email').split(',')).map(s => s.trim().toLowerCase());\nconst maxSteps = offsets.length;\nconst dailyCap = Number($env.DAILY_CAP || 200);\nconst biz = $env.BUSINESS_NAME || 'us';\nconst lateFee = ($env.LATE_FEE_TEXT || '').trim();\nconst nowMs = $now.toMillis();\nconst today = $now.toISODate();\nconst yes = v => String(v || '').toLowerCase() === 'yes';\nconst dateOf = v => { const t = new Date(v).getTime(); return isNaN(t) ? '' : new Date(t).toISOString().slice(0,10); };\nconst rows = $input.all().map(i => i.json);\nconst sentToday = rows.filter(r => r.Last_Outbound_At && dateOf(r.Last_Outbound_At) === today).length;\nlet remaining = Math.max(0, dailyCap - sentToday);\nconst terminal = s => ['paid','disputed','opted out','written off','cancelled','complete'].some(t => s.includes(t));\nconst out = [];\nfor (const r of rows) {\n  if (remaining <= 0) break;\n  if (yes(r.Opted_Out)) continue;\n  if (yes(r.Disputed)) continue;\n  if (String(r.Sequence_Active || 'No').toLowerCase() !== 'yes') continue;\n  if (terminal(String(r.Status || '').toLowerCase())) continue;\n  if (Number(r.Balance || 0) <= 0) continue;\n  const step = Number(r.Reminder_Step || 0);\n  if (step >= maxSteps) continue;\n  const due = r.Next_Reminder_At ? nowMs >= new Date(r.Next_Reminder_At).getTime() : false;\n  if (!due) continue;\n  const nextStep = step + 1;\n  const isLast = nextStep >= maxSteps;\n  const channel = channels[step] || 'sms';\n  const first = r.Customer_Name ? (' ' + String(r.Customer_Name).split(' ')[0]) : '';\n  const inv = r.Invoice_Number ? ` #${r.Invoice_Number}` : '';\n  const bal = r.Balance ? `$${r.Balance}` : 'your balance';\n  const dueStr = r.Due_Date ? dateOf(r.Due_Date) : '';\n  const link = r.Pay_Link ? ` Pay securely: ${r.Pay_Link}` : ' Reply here and we can help you settle it.';\n  const feeNote = lateFee ? ` ${lateFee}` : '';\n  // Escalating-but-respectful tone by step index.\n  let sms;\n  if (step === 0) sms = `Hi${first}, a friendly reminder from ${biz}: invoice${inv} for ${bal}${dueStr ? ' (due ' + dueStr + ')' : ''} is ready to pay.${link}`;\n  else if (step === 1) sms = `Hi${first}, just following up from ${biz} on invoice${inv} for ${bal}. It looks unpaid — happy to help if you have questions.${link}`;\n  else if (isLast) sms = `Hi${first}, final reminder from ${biz} on the past-due invoice${inv} for ${bal}.${feeNote} Please arrange payment or reply so we can sort it out.${link}`;\n  else sms = `Hi${first}, invoice${inv} for ${bal} is now past due. We'd appreciate prompt payment.${feeNote}${link}`;\n  sms = `${sms} Reply STOP to opt out.`;\n  const emailSubject = step === 0 ? `Invoice${inv} from ${biz}` : (isLast ? `Final reminder: invoice${inv} past due` : `Reminder: invoice${inv} from ${biz}`);\n  const emailBody = `Hi${first},\\n\\n${step === 0 ? 'This is a friendly reminder' : (isLast ? 'This is a final reminder' : 'This is a follow-up reminder')} regarding invoice${inv} for ${bal}${dueStr ? ', due ' + dueStr : ''}.${feeNote}\\n\\n${r.Pay_Link ? 'You can pay securely here: ' + r.Pay_Link : 'Please reply to arrange payment.'}\\n\\nIf you've already paid, thank you — please disregard. Questions? Just reply.\\n\\n— ${biz}\\n\\nReply STOP to opt out.`;\n  let nextAt = '';\n  if (!isLast) {\n    const dueMs = r.Due_Date ? new Date(r.Due_Date).getTime() : NaN;\n    nextAt = isNaN(dueMs) ? $now.plus({ minutes: ((offsets[nextStep] || 0) - (offsets[step] || 0)) * 1440 }).toISO() : new Date(dueMs + (offsets[nextStep] || 0) * 86400000).toISOString();\n  }\n  out.push({ json: { ...r, _channel: (channel === 'email' && r.Customer_Email) ? 'email' : 'sms', _sms_msg: sms, _email_subject: emailSubject, _email_body: emailBody, _next_step: nextStep, _is_last: isLast, _next_reminder_at: nextAt, _new_status: isLast ? 'Final Reminder Sent' : (step === 0 ? 'Reminder Sent' : 'Past Due - Reminder Sent') } });\n  remaining--;\n}\nreturn out;"
+      },
+      "id": "node-filter",
+      "name": "Find Due Reminders",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-520, 320]
+    },
+    {
+      "parameters": { "batchSize": 1, "options": {} },
+      "id": "node-loop",
+      "name": "Loop Invoices",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [-280, 320]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            { "conditions": { "options": { "caseSensitive": false, "typeValidation": "loose" }, "conditions": [ { "leftValue": "={{ $json._channel }}", "rightValue": "email", "operator": { "type": "string", "operation": "equals" } } ], "combinator": "and" }, "outputKey": "Email" },
+            { "conditions": { "options": { "caseSensitive": false, "typeValidation": "loose" }, "conditions": [ { "leftValue": "={{ $json._channel }}", "rightValue": "sms", "operator": { "type": "string", "operation": "equals" } } ], "combinator": "and" }, "outputKey": "SMS" }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "node-route",
+      "name": "Route Channel",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [-40, 320]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.Customer_Email }}",
+        "subject": "={{ $json._email_subject }}",
+        "emailType": "text",
+        "message": "={{ $json._email_body }}",
+        "options": {}
+      },
+      "id": "node-email",
+      "name": "Send Reminder Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [220, 200],
+      "credentials": { "gmailOAuth2": { "id": "GMAIL_CRED", "name": "P&P Gmail" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "resource": "sms", "operation": "send",
+        "from": "={{ $env.TWILIO_NUMBER }}",
+        "to": "={{ $json.Customer_Phone }}",
+        "message": "={{ $json._sms_msg }}",
+        "options": {}
+      },
+      "id": "node-sms",
+      "name": "Send Reminder SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [220, 420],
+      "credentials": { "twilioApi": { "id": "TWILIO_CRED", "name": "P&P Twilio" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_INVOICES_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Reminder_Log", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Invoice_ID": "={{ $json.Invoice_ID }}",
+            "Sent_At": "={{ $now.toISO() }}",
+            "Step": "={{ $json._next_step }}",
+            "Channel": "={{ $json._channel }}",
+            "Message": "={{ $json._channel === 'email' ? $json._email_subject : $json._sms_msg }}",
+            "Customer_Phone": "={{ $json.Customer_Phone }}",
+            "Balance": "={{ $json.Balance }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-logreq",
+      "name": "Log Reminder",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [480, 320],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_INVOICES_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Invoices", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Invoice_ID"],
+          "value": {
+            "Invoice_ID": "={{ $json.Invoice_ID }}",
+            "Reminder_Step": "={{ $json._next_step }}",
+            "Last_Outbound_At": "={{ $now.toISO() }}",
+            "Next_Reminder_At": "={{ $json._next_reminder_at }}",
+            "Sequence_Active": "={{ $json._is_last ? 'No' : 'Yes' }}",
+            "Status": "={{ $json._new_status }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-update",
+      "name": "Update Sequence State",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [720, 320],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    }
+  ],
+  "connections": {
+    "Every 30 min": { "main": [[{ "node": "Read Invoices", "type": "main", "index": 0 }]] },
+    "Read Invoices": { "main": [[{ "node": "Find Due Reminders", "type": "main", "index": 0 }]] },
+    "Find Due Reminders": { "main": [[{ "node": "Loop Invoices", "type": "main", "index": 0 }]] },
+    "Loop Invoices": { "main": [[{ "node": "Route Channel", "type": "main", "index": 0 }]] },
+    "Route Channel": { "main": [[{ "node": "Send Reminder Email", "type": "main", "index": 0 }], [{ "node": "Send Reminder SMS", "type": "main", "index": 0 }], []] },
+    "Send Reminder Email": { "main": [[{ "node": "Log Reminder", "type": "main", "index": 0 }]] },
+    "Send Reminder SMS": { "main": [[{ "node": "Log Reminder", "type": "main", "index": 0 }]] },
+    "Log Reminder": { "main": [[{ "node": "Update Sequence State", "type": "main", "index": 0 }]] },
+    "Update Sequence State": { "main": [[{ "node": "Loop Invoices", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
+  "active": false
+}

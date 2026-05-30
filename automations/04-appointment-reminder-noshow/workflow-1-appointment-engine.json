@@ -1,0 +1,289 @@
+{
+  "name": "P&P – Appointment Reminder & No-Show (Core)",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "appointment-engine", "responseMode": "responseNode", "options": {} },
+      "id": "node-webhook",
+      "name": "Appointment Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-1000, 320],
+      "webhookId": "appointment-engine"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response></Response>",
+        "options": { "responseHeaders": { "entries": [ { "name": "Content-Type", "value": "text/xml" } ] } }
+      },
+      "id": "node-respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [-760, 520]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": false, "typeValidation": "loose" },
+                "conditions": [ { "leftValue": "={{ $json.body.MessageSid }}", "rightValue": "", "operator": { "type": "string", "operation": "notEmpty" } } ],
+                "combinator": "and"
+              },
+              "outputKey": "SMS Reply"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": false, "typeValidation": "loose" },
+                "conditions": [ { "leftValue": "={{ $json.body.MessageSid }}", "rightValue": "", "operator": { "type": "string", "operation": "empty" } } ],
+                "combinator": "and"
+              },
+              "outputKey": "New Appointment"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-switch",
+      "name": "Route Event",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [-760, 320]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize an appointment event from Google Calendar / Calendly / Acuity / Jobber / form / manual.\nconst b = $json.body || {};\nconst q = $json.query || {};\nconst pick = (...keys) => { for (const k of keys) { if (b[k] !== undefined && b[k] !== null && String(b[k]).trim() !== '') return String(b[k]).trim(); } return ''; };\nlet name = pick('name','full_name','customer_name','invitee_name','Name');\nlet phone = pick('phone','phone_number','Phone','mobile','sms');\nconst digits = phone.replace(/[^0-9]/g,'');\nif (digits.length===10) phone='+1'+digits; else if (digits.length===11 && digits.startsWith('1')) phone='+'+digits; else if (phone && !phone.startsWith('+')) phone='+'+digits;\nconst email = pick('email','Email','invitee_email');\nconst service = pick('service','appointment_type','event_type','job','reason') || 'appointment';\nconst apptRaw = pick('appt_time','appointment_time','start_time','start','datetime','when');\nlet apptISO = apptRaw;\nconst t = new Date(apptRaw).getTime();\nif (!isNaN(t)) apptISO = new Date(t).toISOString();\nconst source = pick('source') || q.source || 'Manual';\nlet id = pick('appointment_id','id','uid','event_id','event_uuid');\nif (!id) id = `${phone.slice(-4)}-${apptISO}`;\nreturn [{ json: { appointment_id: id, name, phone, email, service, appt_time: apptISO, source, created_at: $now.toISO() } }];"
+      },
+      "id": "node-normalize-appt",
+      "name": "Normalize Appointment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-520, 180]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_APPTS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Appointments", "mode": "name" },
+        "filtersUI": { "values": [ { "lookupColumn": "Appointment_ID", "lookupValue": "={{ $json.appointment_id }}" } ] },
+        "options": {}
+      },
+      "id": "node-find-appt",
+      "name": "Find Existing",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-280, 180],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "typeValidation": "loose" },
+          "conditions": [ { "leftValue": "={{ $json.Appointment_ID }}", "rightValue": "", "operator": { "type": "string", "operation": "empty" } } ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-is-new",
+      "name": "Is New Appointment?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-40, 180]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_APPTS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Appointments", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Appointment_ID": "={{ $('Normalize Appointment').item.json.appointment_id }}",
+            "Created_At": "={{ $('Normalize Appointment').item.json.created_at }}",
+            "Customer_Name": "={{ $('Normalize Appointment').item.json.name }}",
+            "Customer_Phone": "={{ $('Normalize Appointment').item.json.phone }}",
+            "Customer_Email": "={{ $('Normalize Appointment').item.json.email }}",
+            "Service": "={{ $('Normalize Appointment').item.json.service }}",
+            "Appt_Time": "={{ $('Normalize Appointment').item.json.appt_time }}",
+            "Source": "={{ $('Normalize Appointment').item.json.source }}",
+            "Status": "Scheduled",
+            "Reminder_24h_Sent": "No",
+            "Reminder_2h_Sent": "No",
+            "NoShow_Handled": "No",
+            "Owner_Notified": "No",
+            "Rebooked": "No"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-log-appt",
+      "name": "Log Appointment",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [200, 180],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "r1", "name": "customer_phone", "value": "={{ $json.body.From }}", "type": "string" },
+            { "id": "r2", "name": "message_body", "value": "={{ $json.body.Body }}", "type": "string" },
+            { "id": "r3", "name": "message_sid", "value": "={{ $json.body.MessageSid }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-normalize-reply",
+      "name": "Normalize Reply",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-520, 480]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_APPTS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Appointments", "mode": "name" },
+        "filtersUI": { "values": [ { "lookupColumn": "Customer_Phone", "lookupValue": "={{ $json.customer_phone }}" } ] },
+        "options": {}
+      },
+      "id": "node-find-reply",
+      "name": "Find Appointment",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-280, 480],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "modelId": { "__rl": true, "value": "gpt-4o-mini", "mode": "list" },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "=You classify a customer's SMS reply to an appointment reminder for {{ $env.BUSINESS_NAME }}, a {{ $env.BUSINESS_INDUSTRY }} business. Return STRICT JSON only. Schema: {\"action\":\"confirm|reschedule|cancel|question|other\",\"needs_owner\":true|false,\"summary\":\"one sentence for the owner\",\"suggested_reply\":\"warm 1-2 sentence SMS under 320 chars acknowledging their message; for confirm: thank + confirm; for reschedule/cancel: say we'll have someone reach out to find a new time; for question: answer briefly or say a team member will follow up\"}. needs_owner=true for reschedule, cancel, or question. No text outside the JSON."
+            },
+            {
+              "role": "user",
+              "content": "=Appointment: {{ $('Find Appointment').first().json.Service }} at {{ $('Find Appointment').first().json.Appt_Time }}\nCustomer reply: \"{{ $('Normalize Reply').item.json.message_body }}\""
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": { "temperature": 0.2 }
+      },
+      "id": "node-classify",
+      "name": "Classify Reply (AI)",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [-40, 480],
+      "credentials": { "openAiApi": { "id": "OPENAI_CRED", "name": "P&P OpenAI" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ai = $('Classify Reply (AI)').first().json.message?.content ?? $('Classify Reply (AI)').first().json;\nlet p;\ntry { p = typeof ai === 'string' ? JSON.parse(ai) : ai; }\ncatch(e){ p = { action:'other', needs_owner:true, summary:'Could not parse AI output', suggested_reply:'Thanks! A team member will follow up shortly.' }; }\nconst map = { confirm:'Confirmed', reschedule:'Reschedule Requested', cancel:'Cancelled', question:'', other:'' };\nconst newStatus = map[p.action] || '';\nconst r = $('Normalize Reply').item.json;\nconst a = $('Find Appointment').first().json;\nconst convo = ((a.Conversation||'')+`\\nIN: ${r.message_body}\\nOUT: ${p.suggested_reply}`).trim();\nreturn [{ json: { ...p, new_status: newStatus, customer_phone: r.customer_phone, message_body: r.message_body, appointment_id: a.Appointment_ID || '', service: a.Service || '', appt_time: a.Appt_Time || '', conversation: convo } }];"
+      },
+      "id": "node-parse",
+      "name": "Parse Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [200, 480]
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $env.TWILIO_NUMBER }}",
+        "to": "={{ $json.customer_phone }}",
+        "message": "={{ $json.suggested_reply }}",
+        "options": {}
+      },
+      "id": "node-ack-sms",
+      "name": "Send Acknowledgement",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [440, 480],
+      "credentials": { "twilioApi": { "id": "TWILIO_CRED", "name": "P&P Twilio" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_APPTS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Appointments", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Customer_Phone"],
+          "value": {
+            "Customer_Phone": "={{ $json.customer_phone }}",
+            "Last_Inbound_At": "={{ $now.toISO() }}",
+            "Last_Outbound_At": "={{ $now.toISO() }}",
+            "Conversation": "={{ $json.conversation }}",
+            "AI_Action": "={{ $json.action }}",
+            "AI_Summary": "={{ $json.summary }}",
+            "Confirmed_At": "={{ $json.action === 'confirm' ? $now.toISO() : '' }}",
+            "Status": "={{ $json.new_status || 'Replied - Review' }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-update",
+      "name": "Update Appointment",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [680, 480],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "typeValidation": "loose" },
+          "conditions": [ { "leftValue": "={{ $('Parse Reply').item.json.needs_owner }}", "rightValue": "true", "operator": { "type": "boolean", "operation": "true", "singleValue": true } } ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-if-owner",
+      "name": "Needs Owner?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [920, 480]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.OWNER_EMAIL }}",
+        "subject": "=📅 Appointment {{ $('Parse Reply').item.json.action }} – {{ $('Parse Reply').item.json.customer_phone }}",
+        "emailType": "text",
+        "message": "=A customer responded to an appointment reminder and needs attention:\n\nPhone: {{ $('Parse Reply').item.json.customer_phone }}\nAction: {{ $('Parse Reply').item.json.action }}\nAppointment: {{ $('Parse Reply').item.json.service }} at {{ $('Parse Reply').item.json.appt_time }}\nSummary: {{ $('Parse Reply').item.json.summary }}\n\nThey said: \"{{ $('Parse Reply').item.json.message_body }}\"",
+        "options": {}
+      },
+      "id": "node-owner",
+      "name": "Alert Owner",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1160, 400],
+      "credentials": { "gmailOAuth2": { "id": "GMAIL_CRED", "name": "P&P Gmail" } }
+    }
+  ],
+  "connections": {
+    "Appointment Webhook": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }, { "node": "Route Event", "type": "main", "index": 0 }]] },
+    "Route Event": { "main": [ [{ "node": "Normalize Reply", "type": "main", "index": 0 }], [{ "node": "Normalize Appointment", "type": "main", "index": 0 }] ] },
+    "Normalize Appointment": { "main": [[{ "node": "Find Existing", "type": "main", "index": 0 }]] },
+    "Find Existing": { "main": [[{ "node": "Is New Appointment?", "type": "main", "index": 0 }]] },
+    "Is New Appointment?": { "main": [[{ "node": "Log Appointment", "type": "main", "index": 0 }], []] },
+    "Normalize Reply": { "main": [[{ "node": "Find Appointment", "type": "main", "index": 0 }]] },
+    "Find Appointment": { "main": [[{ "node": "Classify Reply (AI)", "type": "main", "index": 0 }]] },
+    "Classify Reply (AI)": { "main": [[{ "node": "Parse Reply", "type": "main", "index": 0 }]] },
+    "Parse Reply": { "main": [[{ "node": "Send Acknowledgement", "type": "main", "index": 0 }]] },
+    "Send Acknowledgement": { "main": [[{ "node": "Update Appointment", "type": "main", "index": 0 }]] },
+    "Update Appointment": { "main": [[{ "node": "Needs Owner?", "type": "main", "index": 0 }]] },
+    "Needs Owner?": { "main": [[{ "node": "Alert Owner", "type": "main", "index": 0 }], []] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true, "callerPolicy": "workflowsFromSameOwner" },
+  "active": false
+}

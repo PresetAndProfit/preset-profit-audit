@@ -27,7 +27,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const maxFollowUps = Number($env.MAX_FOLLOW_UPS || 2);\nconst now = $now;\nconst out = [];\nfor (const item of $input.all()) {\n  const l = item.json;\n  const status = (l.Status || '').toLowerCase();\n  const awaiting = status.includes('awaiting reply') || status.includes('followed up');\n  const count = Number(l.Follow_Up_Count || 0);\n  const hasReplied = !!l.Last_Inbound_At;\n  const due = l.Next_Follow_Up_At ? now >= $DateTime.fromISO(l.Next_Follow_Up_At) : false;\n  if (awaiting && !hasReplied && count < maxFollowUps && due) {\n    out.push({ json: { ...l, _next_count: count + 1, _is_last: (count + 1) >= maxFollowUps } });\n  }\n}\nreturn out;"
+        "jsCode": "const maxFollowUps = Number($env.MAX_FOLLOW_UPS || 2);\nconst now = $now;\nconst out = [];\nfor (const item of $input.all()) {\n  const l = item.json;\n  const status = (l.Status || '').toLowerCase();\n  const awaiting = status.includes('awaiting reply') || status.includes('followed up');\n  const count = Number(l.Follow_Up_Count || 0);\n  const hasReplied = !!l.Last_Inbound_At;\n  const due = l.Next_Follow_Up_At ? now.toMillis() >= new Date(l.Next_Follow_Up_At).getTime() : false;\n  if (awaiting && !hasReplied && count < maxFollowUps && due) {\n    out.push({ json: { ...l, _next_count: count + 1, _is_last: (count + 1) >= maxFollowUps } });\n  }\n}\nreturn out;"
       },
       "id": "node-filter",
       "name": "Filter Due Follow-Ups",

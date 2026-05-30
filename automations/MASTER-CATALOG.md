@@ -12,7 +12,7 @@ Every automation in this catalog is built to be sold, installed, and supported a
 | 01 | Missed Call Recovery System | $750–1,000 | $397 | 0.5–1 day | ✅ |
 | 02 | Lead Capture & Follow-Up Engine | $750–1,000 | $397 | 0.5–1 day | ✅ |
 | 03 | Review & Reputation Engine | $500–750 | $297 | 0.5 day | ✅ |
-| 04 | Appointment Reminder & No-Show Recovery | $500–750 | $297 | 0.5–1 day | 🟡 |
+| 04 | Appointment Reminder & No-Show Recovery | $500–750 | $297 | 0.5–1 day | ✅ |
 | 05 | Database Reactivation Campaign | $1,000–1,500 | $250 + rev-share | 1 day | 🟡 |
 | 06 | Estimate / Quote Follow-Up Sequence | $600–900 | $297 | 0.5–1 day | 🟡 |
 | 07 | AI Receptionist (24/7 Voice + Chat) | $1,500–3,000 | $797–1,500 | 3–5 days | 🟡 |
@@ -54,7 +54,7 @@ Every automation in this catalog is built to be sold, installed, and supported a
 - **Estimated implementation time:** 0.5 day.
 - **Folder:** [`03-review-reputation-engine/`](03-review-reputation-engine/README.md)
 
-## 04 — Appointment Reminder & No-Show Recovery 🟡
+## 04 — Appointment Reminder & No-Show Recovery ✅
 - **Problem solved:** No-shows waste chairs/bays/time. This sends SMS/email reminders, confirms, and re-books no-shows automatically.
 - **Ideal customer:** Appointment-based businesses — dentists, salons/barbers, med-spas, auto repair, real estate showings.
 - **Setup fee:** $500–750

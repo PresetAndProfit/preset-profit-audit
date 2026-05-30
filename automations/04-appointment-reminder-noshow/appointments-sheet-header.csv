@@ -1,0 +1,1 @@
+Appointment_ID,Created_At,Customer_Name,Customer_Phone,Customer_Email,Service,Appt_Time,Source,Status,Confirmed_At,Reminder_24h_Sent,Reminder_2h_Sent,NoShow_Handled,Last_Inbound_At,Last_Outbound_At,Conversation,AI_Action,AI_Summary,Owner_Notified,Rebooked,Notes

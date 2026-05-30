@@ -1,0 +1,194 @@
+{
+  "name": "P&P – Appointment Reminder & No-Show (Scheduler)",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [ { "field": "minutes", "minutesInterval": 15 } ] } },
+      "id": "node-cron",
+      "name": "Every 15 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-1000, 300]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_APPTS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Appointments", "mode": "name" },
+        "options": {}
+      },
+      "id": "node-read",
+      "name": "Read All",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-760, 300],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Emit reminder + no-show actions. Uses plain Date math (robust across n8n versions).\nconst nowMs = $now.toMillis();\nconst lead1 = Number($env.REMINDER_LEAD_1_MIN || 1440); // 24h\nconst lead2 = Number($env.REMINDER_LEAD_2_MIN || 120);  // 2h\nconst grace = Number($env.NOSHOW_GRACE_MIN || 30);\nconst biz = $env.BUSINESS_NAME || 'us';\nconst yes = v => String(v || '').toLowerCase() === 'yes';\nconst out = [];\nfor (const item of $input.all()) {\n  const a = item.json;\n  const status = String(a.Status || '').toLowerCase();\n  if (['cancelled','completed'].some(s => status.includes(s))) continue;\n  const apptMs = new Date(a.Appt_Time).getTime();\n  if (isNaN(apptMs)) continue;\n  const minsUntil = (apptMs - nowMs) / 60000;\n  const name = a.Customer_Name ? (' ' + String(a.Customer_Name).split(' ')[0]) : '';\n  const when = a.Appt_Time;\n  // 24h reminder window\n  if (!yes(a.Reminder_24h_Sent) && minsUntil <= lead1 && minsUntil > lead2) {\n    out.push({ json: { ...a, _action: 'reminder24', _msg: `Hi${name}, a reminder from ${biz}: you have a ${a.Service} appointment on ${when}. Reply C to confirm, R to reschedule, or X to cancel.`, } });\n    continue;\n  }\n  // 2h reminder window\n  if (!yes(a.Reminder_2h_Sent) && minsUntil <= lead2 && minsUntil > 0) {\n    out.push({ json: { ...a, _action: 'reminder2', _msg: `Hi${name}, see you soon! Your ${a.Service} appointment with ${biz} is at ${when}. Reply C to confirm or R to reschedule.`, } });\n    continue;\n  }\n  // No-show: appt time passed beyond grace, never confirmed, not handled\n  const notConfirmed = !status.includes('confirmed');\n  if (!yes(a.NoShow_Handled) && (status === 'no-show' || (notConfirmed && minsUntil < -grace))) {\n    out.push({ json: { ...a, _action: 'noshow', _msg: `Hi${name}, we missed you for your ${a.Service} appointment with ${biz}. No problem - reply here and we'll get you rebooked at a better time!`, } });\n  }\n}\nreturn out;"
+      },
+      "id": "node-filter",
+      "name": "Find Due Actions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-520, 300]
+    },
+    {
+      "parameters": { "batchSize": 1, "options": {} },
+      "id": "node-loop",
+      "name": "Loop Appointments",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [-280, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": false, "typeValidation": "loose" },
+                "conditions": [ { "leftValue": "={{ $json._action }}", "rightValue": "noshow", "operator": { "type": "string", "operation": "equals" } } ],
+                "combinator": "and"
+              },
+              "outputKey": "No-Show"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": false, "typeValidation": "loose" },
+                "conditions": [ { "leftValue": "={{ $json._action }}", "rightValue": "reminder", "operator": { "type": "string", "operation": "startsWith" } } ],
+                "combinator": "and"
+              },
+              "outputKey": "Reminder"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "node-route",
+      "name": "Route Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [-40, 300]
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $env.TWILIO_NUMBER }}",
+        "to": "={{ $json.Customer_Phone }}",
+        "message": "={{ $json._msg }}",
+        "options": {}
+      },
+      "id": "node-noshow-sms",
+      "name": "Send No-Show Rebook",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [220, 160],
+      "credentials": { "twilioApi": { "id": "TWILIO_CRED", "name": "P&P Twilio" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.OWNER_EMAIL }}",
+        "subject": "=🚫 No-show – {{ $json.Customer_Name || $json.Customer_Phone }} ({{ $json.Service }})",
+        "emailType": "text",
+        "message": "=A customer no-showed and was auto-sent a rebook text:\n\nName: {{ $json.Customer_Name }}\nPhone: {{ $json.Customer_Phone }}\nService: {{ $json.Service }}\nScheduled: {{ $json.Appt_Time }}\n\nFollow up if they don't reply.",
+        "options": {}
+      },
+      "id": "node-noshow-owner",
+      "name": "Alert Owner (No-Show)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [460, 160],
+      "credentials": { "gmailOAuth2": { "id": "GMAIL_CRED", "name": "P&P Gmail" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_APPTS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Appointments", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Appointment_ID"],
+          "value": {
+            "Appointment_ID": "={{ $json.Appointment_ID }}",
+            "Last_Outbound_At": "={{ $now.toISO() }}",
+            "Status": "No-Show - Rebook Sent",
+            "NoShow_Handled": "Yes",
+            "Owner_Notified": "Yes"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-update-noshow",
+      "name": "Mark No-Show Handled",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [700, 160],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $env.TWILIO_NUMBER }}",
+        "to": "={{ $json.Customer_Phone }}",
+        "message": "={{ $json._msg }}",
+        "options": {}
+      },
+      "id": "node-reminder-sms",
+      "name": "Send Reminder",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [220, 440],
+      "credentials": { "twilioApi": { "id": "TWILIO_CRED", "name": "P&P Twilio" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_APPTS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Appointments", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Appointment_ID"],
+          "value": {
+            "Appointment_ID": "={{ $json.Appointment_ID }}",
+            "Last_Outbound_At": "={{ $now.toISO() }}",
+            "Reminder_24h_Sent": "={{ $json._action === 'reminder24' ? 'Yes' : ($json.Reminder_24h_Sent || 'No') }}",
+            "Reminder_2h_Sent": "={{ $json._action === 'reminder2' ? 'Yes' : ($json.Reminder_2h_Sent || 'No') }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-update-reminder",
+      "name": "Mark Reminder Sent",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [460, 440],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    }
+  ],
+  "connections": {
+    "Every 15 min": { "main": [[{ "node": "Read All", "type": "main", "index": 0 }]] },
+    "Read All": { "main": [[{ "node": "Find Due Actions", "type": "main", "index": 0 }]] },
+    "Find Due Actions": { "main": [[{ "node": "Loop Appointments", "type": "main", "index": 0 }]] },
+    "Loop Appointments": { "main": [[{ "node": "Route Action", "type": "main", "index": 0 }]] },
+    "Route Action": {
+      "main": [
+        [{ "node": "Send No-Show Rebook", "type": "main", "index": 0 }],
+        [{ "node": "Send Reminder", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Send No-Show Rebook": { "main": [[{ "node": "Alert Owner (No-Show)", "type": "main", "index": 0 }]] },
+    "Alert Owner (No-Show)": { "main": [[{ "node": "Mark No-Show Handled", "type": "main", "index": 0 }]] },
+    "Mark No-Show Handled": { "main": [[{ "node": "Loop Appointments", "type": "main", "index": 0 }]] },
+    "Send Reminder": { "main": [[{ "node": "Mark Reminder Sent", "type": "main", "index": 0 }]] },
+    "Mark Reminder Sent": { "main": [[{ "node": "Loop Appointments", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
+  "active": false
+}

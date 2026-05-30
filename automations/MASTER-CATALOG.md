@@ -13,7 +13,7 @@ Every automation in this catalog is built to be sold, installed, and supported a
 | 02 | Lead Capture & Follow-Up Engine | $750–1,000 | $397 | 0.5–1 day | ✅ |
 | 03 | Review & Reputation Engine | $500–750 | $297 | 0.5 day | ✅ |
 | 04 | Appointment Reminder & No-Show Recovery | $500–750 | $297 | 0.5–1 day | ✅ |
-| 05 | Database Reactivation Campaign | $1,000–1,500 | $250 + rev-share | 1 day | 🟡 |
+| 05 | Database Reactivation Campaign | $1,000–1,500 | $250 + rev-share | 1 day | ✅ |
 | 06 | Estimate / Quote Follow-Up Sequence | $600–900 | $297 | 0.5–1 day | 🟡 |
 | 07 | AI Receptionist (24/7 Voice + Chat) | $1,500–3,000 | $797–1,500 | 3–5 days | 🟡 |
 | 08 | Referral Generator | $500–750 | $247 | 0.5 day | 🟡 |
@@ -64,7 +64,7 @@ Every automation in this catalog is built to be sold, installed, and supported a
 - **Estimated implementation time:** 0.5–1 day.
 - **Folder:** [`04-appointment-reminder-noshow/`](04-appointment-reminder-noshow/README.md)
 
-## 05 — Database Reactivation Campaign 🟡
+## 05 — Database Reactivation Campaign ✅
 - **Problem solved:** Every business has a list of past customers/dead leads doing nothing. This runs an AI-personalized win-back SMS/email campaign to that list.
 - **Ideal customer:** Any business with 200+ past customers — HVAC (maintenance plans), dentists (recall), salons, auto repair.
 - **Setup fee:** $1,000–1,500

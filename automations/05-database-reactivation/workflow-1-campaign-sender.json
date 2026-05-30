@@ -1,0 +1,144 @@
+{
+  "name": "P&P – Database Reactivation (Throttled Campaign Sender)",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [ { "field": "minutes", "minutesInterval": 10 } ] } },
+      "id": "node-cron",
+      "name": "Every 10 min (drip)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-1040, 300]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_CONTACTS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Contacts", "mode": "name" },
+        "options": {}
+      },
+      "id": "node-read",
+      "name": "Read Contacts",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-800, 300],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Eligibility + compliance + throttle gate. Uses plain Date math for version-safety.\nconst openH = Number($env.BUSINESS_HOURS_START || 9);\nconst closeH = Number($env.BUSINESS_HOURS_END || 19);\nif (!($now.hour >= openH && $now.hour < closeH)) return []; // only send in business hours\nconst today = $now.toISODate();\nconst dailyCap = Number($env.DAILY_CAP || 100);\nconst batch = Number($env.BATCH_SIZE || 20);\nconst rows = $input.all().map(i => i.json);\nconst dateOf = v => { const t = new Date(v).getTime(); return isNaN(t) ? '' : new Date(t).toISOString().slice(0,10); };\nconst sentToday = rows.filter(r => r.Sent_At && dateOf(r.Sent_At) === today).length;\nconst remaining = Math.max(0, dailyCap - sentToday);\nconst toSend = Math.min(batch, remaining);\nif (toSend <= 0) return [];\nconst eligible = rows.filter(r => {\n  const consent = String(r.Consent || '').toLowerCase() === 'yes';\n  const optedOut = String(r.Opted_Out || '').toLowerCase() === 'yes';\n  const alreadySent = !!r.Sent_At || String(r.Status || '').toLowerCase().includes('sent') || String(r.Status||'').toLowerCase().includes('opted');\n  const hasPhone = !!String(r.Customer_Phone || '').trim();\n  return consent && !optedOut && !alreadySent && hasPhone;\n});\nreturn eligible.slice(0, toSend).map(r => ({ json: r }));"
+      },
+      "id": "node-filter",
+      "name": "Filter Eligible (Consent + Cap)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-560, 300]
+    },
+    {
+      "parameters": { "batchSize": 1, "options": {} },
+      "id": "node-loop",
+      "name": "Loop Contacts",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [-320, 300]
+    },
+    {
+      "parameters": {
+        "modelId": { "__rl": true, "value": "gpt-4o-mini", "mode": "list" },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "=You write a single warm win-back SMS for {{ $env.BUSINESS_NAME }}, a {{ $env.BUSINESS_INDUSTRY }} business, to a PAST customer who consented to messages. Return STRICT JSON only: {\"sms\":\"1-2 sentence, under 260 characters, friendly and personal. Use their first name if available. Reference their last service if available. Include this offer if provided: {{ $env.OFFER }}. Invite them to reply or book: {{ $env.BOOKING_LINK }}. Do NOT include opt-out text (added automatically). No emojis spam, no ALL CAPS, no fake urgency.\"}. No text outside the JSON."
+            },
+            {
+              "role": "user",
+              "content": "=First name: {{ ($json.Customer_Name || '').split(' ')[0] }}\nLast service: {{ $json.Last_Service || 'unknown' }}\nLast visit: {{ $json.Last_Visit || 'a while ago' }}"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": { "temperature": 0.6 }
+      },
+      "id": "node-personalize",
+      "name": "Personalize (AI)",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [-80, 300],
+      "credentials": { "openAiApi": { "id": "OPENAI_CRED", "name": "P&P OpenAI" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ai = $('Personalize (AI)').first().json.message?.content ?? $('Personalize (AI)').first().json;\nlet p;\ntry { p = typeof ai === 'string' ? JSON.parse(ai) : ai; } catch(e){ p = { sms: '' }; }\nconst c = $json;\nconst biz = $env.BUSINESS_NAME || 'us';\nlet body = (p.sms && p.sms.trim()) ? p.sms.trim() : `Hi${c.Customer_Name ? ' ' + String(c.Customer_Name).split(' ')[0] : ''}, it's ${biz} - we'd love to see you again! ${$env.OFFER || ''} ${$env.BOOKING_LINK || ''}`.trim();\n// Compliance: ALWAYS append opt-out, regardless of AI output.\nbody = `${body} Txt STOP to opt out.`;\nreturn [{ json: { contact_id: c.Contact_ID || '', customer_phone: c.Customer_Phone, body } }];"
+      },
+      "id": "node-parse",
+      "name": "Build Message (+ STOP)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [160, 300]
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $env.TWILIO_NUMBER }}",
+        "to": "={{ $json.customer_phone }}",
+        "message": "={{ $json.body }}",
+        "options": {}
+      },
+      "id": "node-send",
+      "name": "Send Reactivation SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [400, 300],
+      "credentials": { "twilioApi": { "id": "TWILIO_CRED", "name": "P&P Twilio" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_CONTACTS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Contacts", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Contact_ID"],
+          "value": {
+            "Contact_ID": "={{ $json.contact_id }}",
+            "Sent_At": "={{ $now.toISO() }}",
+            "Last_Outbound_At": "={{ $now.toISO() }}",
+            "Conversation": "={{ 'OUT: ' + $json.body }}",
+            "Status": "Reactivation Sent"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-mark",
+      "name": "Mark Sent",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [640, 300],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": { "amount": "={{ Number($env.SEND_GAP_SEC || 2) }}", "unit": "seconds" },
+      "id": "node-wait",
+      "name": "Throttle Gap",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [880, 300],
+      "webhookId": "reactivation-throttle"
+    }
+  ],
+  "connections": {
+    "Every 10 min (drip)": { "main": [[{ "node": "Read Contacts", "type": "main", "index": 0 }]] },
+    "Read Contacts": { "main": [[{ "node": "Filter Eligible (Consent + Cap)", "type": "main", "index": 0 }]] },
+    "Filter Eligible (Consent + Cap)": { "main": [[{ "node": "Loop Contacts", "type": "main", "index": 0 }]] },
+    "Loop Contacts": { "main": [[{ "node": "Personalize (AI)", "type": "main", "index": 0 }]] },
+    "Personalize (AI)": { "main": [[{ "node": "Build Message (+ STOP)", "type": "main", "index": 0 }]] },
+    "Build Message (+ STOP)": { "main": [[{ "node": "Send Reactivation SMS", "type": "main", "index": 0 }]] },
+    "Send Reactivation SMS": { "main": [[{ "node": "Mark Sent", "type": "main", "index": 0 }]] },
+    "Mark Sent": { "main": [[{ "node": "Throttle Gap", "type": "main", "index": 0 }]] },
+    "Throttle Gap": { "main": [[{ "node": "Loop Contacts", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
+  "active": false
+}

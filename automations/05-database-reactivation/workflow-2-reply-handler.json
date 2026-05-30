@@ -1,0 +1,218 @@
+{
+  "name": "P&P – Database Reactivation (Reply & Opt-Out Handler)",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "reactivation", "responseMode": "responseNode", "options": {} },
+      "id": "node-webhook",
+      "name": "Reply Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-1040, 320],
+      "webhookId": "reactivation"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response></Response>",
+        "options": { "responseHeaders": { "entries": [ { "name": "Content-Type", "value": "text/xml" } ] } }
+      },
+      "id": "node-respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [-800, 520]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "r1", "name": "customer_phone", "value": "={{ $json.body.From }}", "type": "string" },
+            { "id": "r2", "name": "message_body", "value": "={{ $json.body.Body }}", "type": "string" },
+            { "id": "r3", "name": "message_sid", "value": "={{ $json.body.MessageSid }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-normalize",
+      "name": "Normalize Reply",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-800, 320]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false, "typeValidation": "loose" },
+          "conditions": [ { "leftValue": "={{ $json.message_body }}", "rightValue": "^\\s*(stop|stopall|unsubscribe|cancel|end|quit|optout|opt out)\\s*$", "operator": { "type": "string", "operation": "regex" } } ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-is-stop",
+      "name": "Is Opt-Out?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-560, 320]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_CONTACTS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Contacts", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Customer_Phone"],
+          "value": {
+            "Customer_Phone": "={{ $json.customer_phone }}",
+            "Opted_Out": "Yes",
+            "Last_Inbound_At": "={{ $now.toISO() }}",
+            "Status": "Opted Out"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-suppress",
+      "name": "Suppress (Opt-Out)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-320, 160],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_CONTACTS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Contacts", "mode": "name" },
+        "filtersUI": { "values": [ { "lookupColumn": "Customer_Phone", "lookupValue": "={{ $json.customer_phone }}" } ] },
+        "options": {}
+      },
+      "id": "node-find",
+      "name": "Find Contact",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-320, 460],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "modelId": { "__rl": true, "value": "gpt-4o-mini", "mode": "list" },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "=You classify a past customer's reply to a win-back message from {{ $env.BUSINESS_NAME }}, a {{ $env.BUSINESS_INDUSTRY }} business. Return STRICT JSON only. Schema: {\"intent\":\"interested|not_interested|question|other\",\"interested\":true|false,\"summary\":\"one sentence for the owner\",\"suggested_reply\":\"warm 1-2 sentence SMS under 300 chars; if interested, drive to booking with {{ $env.BOOKING_LINK }}; if not interested, politely acknowledge and stop; never pushy\"}. No text outside the JSON."
+            },
+            { "role": "user", "content": "=Reply: \"{{ $('Normalize Reply').item.json.message_body }}\"" }
+          ]
+        },
+        "jsonOutput": true,
+        "options": { "temperature": 0.3 }
+      },
+      "id": "node-classify",
+      "name": "Classify Reply (AI)",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [-80, 460],
+      "credentials": { "openAiApi": { "id": "OPENAI_CRED", "name": "P&P OpenAI" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ai = $('Classify Reply (AI)').first().json.message?.content ?? $('Classify Reply (AI)').first().json;\nlet p; try { p = typeof ai === 'string' ? JSON.parse(ai) : ai; } catch(e){ p = { intent:'other', interested:false, summary:'Could not parse AI output', suggested_reply:'Thanks for getting back to us! A team member will follow up shortly.' }; }\nconst r = $('Normalize Reply').item.json;\nconst c = $('Find Contact').first().json;\nconst convo = ((c.Conversation||'')+`\\nIN: ${r.message_body}\\nOUT: ${p.suggested_reply}`).trim();\nconst statusMap = { interested:'Replied - Interested', not_interested:'Replied - Not Interested', question:'Replied - Question', other:'Replied - Review' };\nreturn [{ json: { ...p, customer_phone: r.customer_phone, message_body: r.message_body, customer_name: c.Customer_Name||'', conversation: convo, new_status: statusMap[p.intent] || 'Replied - Review' } }];"
+      },
+      "id": "node-parse",
+      "name": "Parse Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [160, 460]
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $env.TWILIO_NUMBER }}",
+        "to": "={{ $json.customer_phone }}",
+        "message": "={{ $json.suggested_reply }}",
+        "options": {}
+      },
+      "id": "node-reply-sms",
+      "name": "Send AI Reply",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [400, 460],
+      "credentials": { "twilioApi": { "id": "TWILIO_CRED", "name": "P&P Twilio" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_CONTACTS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Contacts", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Customer_Phone"],
+          "value": {
+            "Customer_Phone": "={{ $json.customer_phone }}",
+            "Last_Inbound_At": "={{ $now.toISO() }}",
+            "Last_Outbound_At": "={{ $now.toISO() }}",
+            "Conversation": "={{ $json.conversation }}",
+            "AI_Intent": "={{ $json.intent }}",
+            "AI_Summary": "={{ $json.summary }}",
+            "Interested": "={{ $json.interested }}",
+            "Status": "={{ $json.new_status }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-update",
+      "name": "Update Contact",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [640, 460],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "typeValidation": "loose" },
+          "conditions": [ { "leftValue": "={{ $('Parse Reply').item.json.interested }}", "rightValue": "true", "operator": { "type": "boolean", "operation": "true", "singleValue": true } } ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-if-interested",
+      "name": "Interested?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [880, 460]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.OWNER_EMAIL }}",
+        "subject": "=🔥 Reactivated lead – {{ $('Parse Reply').item.json.customer_name || $('Parse Reply').item.json.customer_phone }}",
+        "emailType": "text",
+        "message": "=A past customer responded to the reactivation campaign and is interested:\n\nName: {{ $('Parse Reply').item.json.customer_name }}\nPhone: {{ $('Parse Reply').item.json.customer_phone }}\nSummary: {{ $('Parse Reply').item.json.summary }}\n\nThey said: \"{{ $('Parse Reply').item.json.message_body }}\"\n\nReach out / book them now.",
+        "options": {}
+      },
+      "id": "node-owner",
+      "name": "Alert Owner",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1120, 380],
+      "credentials": { "gmailOAuth2": { "id": "GMAIL_CRED", "name": "P&P Gmail" } }
+    }
+  ],
+  "connections": {
+    "Reply Webhook": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }, { "node": "Normalize Reply", "type": "main", "index": 0 }]] },
+    "Normalize Reply": { "main": [[{ "node": "Is Opt-Out?", "type": "main", "index": 0 }]] },
+    "Is Opt-Out?": { "main": [ [{ "node": "Suppress (Opt-Out)", "type": "main", "index": 0 }], [{ "node": "Find Contact", "type": "main", "index": 0 }] ] },
+    "Find Contact": { "main": [[{ "node": "Classify Reply (AI)", "type": "main", "index": 0 }]] },
+    "Classify Reply (AI)": { "main": [[{ "node": "Parse Reply", "type": "main", "index": 0 }]] },
+    "Parse Reply": { "main": [[{ "node": "Send AI Reply", "type": "main", "index": 0 }]] },
+    "Send AI Reply": { "main": [[{ "node": "Update Contact", "type": "main", "index": 0 }]] },
+    "Update Contact": { "main": [[{ "node": "Interested?", "type": "main", "index": 0 }]] },
+    "Interested?": { "main": [[{ "node": "Alert Owner", "type": "main", "index": 0 }], []] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true, "callerPolicy": "workflowsFromSameOwner" },
+  "active": false
+}

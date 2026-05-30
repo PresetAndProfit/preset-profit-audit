@@ -1,0 +1,541 @@
+{
+  "name": "P&P – Estimate / Quote Follow-Up (Capture & Intake)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "estimate-intake",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-webhook",
+      "name": "Estimate Intake Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-1040, 360],
+      "webhookId": "estimate-intake"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"status\": \"received\" } }}",
+        "options": {}
+      },
+      "id": "node-respond",
+      "name": "Respond to Source",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [-800, 560]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": false, "typeValidation": "loose" },
+                "conditions": [
+                  { "leftValue": "={{ $json.body.MessageSid }}", "rightValue": "", "operator": { "type": "string", "operation": "notEmpty" } }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "SMS Reply"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": false, "typeValidation": "loose" },
+                "conditions": [
+                  { "leftValue": "={{ ($json.body.event || $json.query.event || '').toString().toLowerCase() }}", "rightValue": "viewed", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "Quote Viewed"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "node-switch",
+      "name": "Route Event",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [-800, 360]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize an estimate/quote from any source: Sheet, manual, generic webhook,\n// Jobber, ServiceTitan, Housecall Pro, GoHighLevel. Flat + common nested shapes.\nconst b = $json.body || {};\nconst q = $json.query || {};\n// Merge likely nested containers so a single pick() sees them all.\nconst nests = [b, b.data, b.client, b.customer, b.contact, b.estimate, b.quote, b.job, b.opportunity, b.deal, q].filter(Boolean);\nconst pick = (...keys) => { for (const src of nests) { for (const k of keys) { const v = src && src[k]; if (v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim(); } } return ''; };\nlet name = pick('customer_name','customerName','client_name','name','full_name','fullName','contactName');\nconst first = pick('first_name','firstName');\nconst last = pick('last_name','lastName');\nif (!name && (first || last)) name = `${first} ${last}`.trim();\nlet phone = pick('phone','phone_number','phoneNumber','mobile','mobile_phone','cell');\nconst digits = phone.replace(/[^0-9]/g, '');\nif (digits.length === 10) phone = '+1' + digits;\nelse if (digits.length === 11 && digits.startsWith('1')) phone = '+' + digits;\nelse if (phone && !phone.startsWith('+')) phone = digits ? '+' + digits : '';\nconst email = pick('email','email_address','emailAddress','customer_email');\nconst service = pick('service','service_type','serviceType','job_type','jobType','category','title','line_item','description');\n// Amount: handle $, commas, monetaryValue (GHL), total (ServiceTitan/Jobber)\nlet amountRaw = pick('estimate_amount','amount','total','quote_total','quoteAmount','price','value','monetaryValue','grand_total','grandTotal');\nconst amount = Number(String(amountRaw).replace(/[^0-9.]/g, '')) || 0;\nconst estimateDate = pick('estimate_date','estimateDate','created_at','createdAt','date','sent_at','issued_at') || $now.toISODate();\nconst expirationDate = pick('expiration_date','expirationDate','expires_at','expiresAt','valid_until','validUntil','expiry');\nconst rep = pick('assigned_rep','assignedRep','rep','salesperson','sales_rep','owner','assigned_to','assignedTo','user');\nlet status = pick('status','stage','state','pipeline_stage') || 'New';\nconst source = pick('source','provider','integration') || q.source || 'Webhook';\n// Stable dedup key: prefer the source's own id, else phone+amount.\nconst extId = pick('quote_id','quoteId','estimate_id','estimateId','id','opportunity_id','opportunityId','deal_id','number','quote_number');\nconst quoteId = extId ? `${source}-${extId}` : (digits ? `${digits.slice(-10)}-${Math.round(amount)}` : `${$now.toMillis()}`);\nreturn [{ json: { quote_id: quoteId, name, phone, email, service, amount, estimate_date: estimateDate, expiration_date: expirationDate, assigned_rep: rep, source, source_status: status, received_at: $now.toISO() } }];"
+      },
+      "id": "node-normalize",
+      "name": "Normalize Estimate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-540, 200]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_QUOTES_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Quotes", "mode": "name" },
+        "filtersUI": { "values": [ { "lookupColumn": "Quote_ID", "lookupValue": "={{ $json.quote_id }}" } ] },
+        "options": {}
+      },
+      "id": "node-find",
+      "name": "Find Existing Quote",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-300, 200],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "typeValidation": "loose" },
+          "conditions": [
+            { "leftValue": "={{ $json.Quote_ID }}", "rightValue": "", "operator": { "type": "string", "operation": "empty" } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-is-new",
+      "name": "Is New Quote?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-60, 200]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_QUOTES_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Quotes", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Quote_ID": "={{ $('Normalize Estimate').item.json.quote_id }}",
+            "Created_At": "={{ $('Normalize Estimate').item.json.received_at }}",
+            "Customer_Name": "={{ $('Normalize Estimate').item.json.name }}",
+            "Customer_Phone": "={{ $('Normalize Estimate').item.json.phone }}",
+            "Customer_Email": "={{ $('Normalize Estimate').item.json.email }}",
+            "Service_Type": "={{ $('Normalize Estimate').item.json.service }}",
+            "Estimate_Amount": "={{ $('Normalize Estimate').item.json.amount }}",
+            "Estimate_Date": "={{ $('Normalize Estimate').item.json.estimate_date }}",
+            "Expiration_Date": "={{ $('Normalize Estimate').item.json.expiration_date }}",
+            "Assigned_Rep": "={{ $('Normalize Estimate').item.json.assigned_rep }}",
+            "Source": "={{ $('Normalize Estimate').item.json.source }}",
+            "Status": "Open - Follow-Up Scheduled",
+            "Sequence_Step": "0",
+            "Sequence_Active": "Yes",
+            "Next_Follow_Up_At": "={{ $now.plus({ minutes: Number(($env.FOLLOWUP_DAYS || '1,3,7,14,21').split(',')[0].trim()) * 1440 }).toISO() }}",
+            "Views": "0",
+            "Opted_Out": "No",
+            "Owner_Notified": "No",
+            "Won": "No"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-log",
+      "name": "Log New Quote",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [200, 80],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_QUOTES_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Status_History", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Quote_ID": "={{ $('Normalize Estimate').item.json.quote_id }}",
+            "Changed_At": "={{ $now.toISO() }}",
+            "Old_Status": "",
+            "New_Status": "Open - Follow-Up Scheduled",
+            "Changed_By": "={{ $('Normalize Estimate').item.json.source }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-status-new",
+      "name": "Record Status (New)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [440, 80],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "typeValidation": "loose" },
+          "conditions": [
+            { "leftValue": "={{ Number($('Normalize Estimate').item.json.amount) }}", "rightValue": "={{ Number($env.HIGH_VALUE_ESTIMATE || 5000) }}", "operator": { "type": "number", "operation": "gte" } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-is-highvalue",
+      "name": "High-Value Quote?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 80]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.OWNER_EMAIL }}",
+        "subject": "=💰 High-value estimate logged – {{ $('Normalize Estimate').item.json.name || $('Normalize Estimate').item.json.phone }} (${{ $('Normalize Estimate').item.json.amount }})",
+        "emailType": "text",
+        "message": "=A high-value estimate was just captured and entered the follow-up sequence:\n\nCustomer: {{ $('Normalize Estimate').item.json.name }}\nPhone: {{ $('Normalize Estimate').item.json.phone }}\nEmail: {{ $('Normalize Estimate').item.json.email }}\nService: {{ $('Normalize Estimate').item.json.service }}\nAmount: ${{ $('Normalize Estimate').item.json.amount }}\nExpires: {{ $('Normalize Estimate').item.json.expiration_date || 'n/a' }}\nRep: {{ $('Normalize Estimate').item.json.assigned_rep || 'unassigned' }}\nSource: {{ $('Normalize Estimate').item.json.source }}\n\nThe automated follow-up sequence (Day 1/3/7/14/21) is now running. Consider a personal touch on this one.",
+        "options": {}
+      },
+      "id": "node-alert-new",
+      "name": "Alert Owner (High-Value)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [920, 80],
+      "credentials": { "gmailOAuth2": { "id": "GMAIL_CRED", "name": "P&P Gmail" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_QUOTES_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Quotes", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Quote_ID"],
+          "value": {
+            "Quote_ID": "={{ $('Normalize Estimate').item.json.quote_id }}",
+            "Estimate_Amount": "={{ $('Normalize Estimate').item.json.amount }}",
+            "Service_Type": "={{ $('Normalize Estimate').item.json.service }}",
+            "Expiration_Date": "={{ $('Normalize Estimate').item.json.expiration_date }}",
+            "Assigned_Rep": "={{ $('Normalize Estimate').item.json.assigned_rep }}",
+            "Last_Source_Update_At": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-update-existing",
+      "name": "Update Existing Quote",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [200, 320],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "r1", "name": "customer_phone", "value": "={{ $json.body.From }}", "type": "string" },
+            { "id": "r2", "name": "message_body", "value": "={{ $json.body.Body }}", "type": "string" },
+            { "id": "r3", "name": "message_sid", "value": "={{ $json.body.MessageSid }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-normalize-reply",
+      "name": "Normalize Reply",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-540, 540]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false, "typeValidation": "loose" },
+          "conditions": [ { "leftValue": "={{ $json.message_body }}", "rightValue": "^\\s*(stop|stopall|unsubscribe|cancel|end|quit|optout|opt out)\\s*$", "operator": { "type": "string", "operation": "regex" } } ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-is-stop",
+      "name": "Is Opt-Out?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-300, 540]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_QUOTES_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Quotes", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Customer_Phone"],
+          "value": {
+            "Customer_Phone": "={{ $json.customer_phone }}",
+            "Opted_Out": "Yes",
+            "Sequence_Active": "No",
+            "Last_Inbound_At": "={{ $now.toISO() }}",
+            "Status": "Declined - Opted Out"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-suppress",
+      "name": "Suppress (Opt-Out)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-60, 420],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_QUOTES_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Quotes", "mode": "name" },
+        "filtersUI": { "values": [ { "lookupColumn": "Customer_Phone", "lookupValue": "={{ $json.customer_phone }}" } ] },
+        "options": {}
+      },
+      "id": "node-find-reply",
+      "name": "Find Quote (Reply)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-60, 660],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "modelId": { "__rl": true, "value": "gpt-4o-mini", "mode": "list" },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "=You analyze a customer's reply to an estimate/quote follow-up from {{ $env.BUSINESS_NAME }}, a {{ $env.BUSINESS_INDUSTRY }} business. The customer was quoted ${{ $('Find Quote (Reply)').first().json.Estimate_Amount || 'unknown' }} for {{ $('Find Quote (Reply)').first().json.Service_Type || 'a job' }}. Return STRICT JSON only. Schema: {\"interest\":\"HOT|WARM|COLD|DECLINED\",\"intent\":\"accept|negotiate|question|schedule_call|not_now|decline|other\",\"wants_call\":true|false,\"objection\":\"price|timing|trust|scope|none\",\"summary\":\"one sentence for the owner\",\"suggested_reply\":\"warm, helpful 1-2 sentence SMS under 300 chars; if HOT/accept, drive to booking {{ $env.BOOKING_LINK }}; if objection, acknowledge it and offer to help; if DECLINED, politely thank them and stop; never pushy, never invent prices or discounts\"}. HOT = ready to move forward or accepting. WARM = interested with a question/objection. COLD = vague/stalling. DECLINED = clear no. No text outside the JSON object."
+            },
+            { "role": "user", "content": "=Prior conversation:\n{{ $('Find Quote (Reply)').first().json.Conversation || 'none' }}\n\nCustomer reply: \"{{ $('Normalize Reply').item.json.message_body }}\"" }
+          ]
+        },
+        "jsonOutput": true,
+        "options": { "temperature": 0.3 }
+      },
+      "id": "node-classify",
+      "name": "Classify Reply (AI)",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [180, 660],
+      "credentials": { "openAiApi": { "id": "OPENAI_CRED", "name": "P&P OpenAI" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ai = $('Classify Reply (AI)').first().json.message?.content ?? $('Classify Reply (AI)').first().json;\nlet p;\ntry { p = typeof ai === 'string' ? JSON.parse(ai) : ai; }\ncatch (e) { p = { interest:'WARM', intent:'other', wants_call:false, objection:'none', summary:'Could not parse AI output', suggested_reply:'Thanks for getting back to us! A team member will follow up shortly.' }; }\nconst r = $('Normalize Reply').item.json;\nconst c = $('Find Quote (Reply)').first().json;\nconst convo = ((c.Conversation || '') + `\\nIN: ${r.message_body}\\nOUT: ${p.suggested_reply}`).trim();\nconst interest = String(p.interest || 'WARM').toUpperCase();\nconst statusMap = { HOT:'Replied - Hot', WARM:'Replied - Warm', COLD:'Replied - Cold', DECLINED:'Declined' };\nconst terminal = interest === 'DECLINED' || p.intent === 'accept' || p.intent === 'decline';\nconst won = p.intent === 'accept';\nconst alertOwner = interest === 'HOT' || p.wants_call === true || won || (p.objection && p.objection !== 'none');\nconst newStatus = won ? 'Won - Accepted' : (statusMap[interest] || 'Replied - Warm');\nreturn [{ json: { interest, intent: p.intent || 'other', wants_call: !!p.wants_call, objection: p.objection || 'none', summary: p.summary || '', suggested_reply: p.suggested_reply || 'Thanks! We will follow up shortly.', customer_phone: r.customer_phone, message_body: r.message_body, customer_name: c.Customer_Name || '', estimate_amount: c.Estimate_Amount || '', service_type: c.Service_Type || '', assigned_rep: c.Assigned_Rep || '', conversation: convo, new_status: newStatus, sequence_active: terminal ? 'No' : 'Yes', won: won ? 'Yes' : 'No', alert_owner: alertOwner } }];"
+      },
+      "id": "node-parse-reply",
+      "name": "Parse Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 660]
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $env.TWILIO_NUMBER }}",
+        "to": "={{ $json.customer_phone }}",
+        "message": "={{ $json.suggested_reply }}",
+        "options": {}
+      },
+      "id": "node-reply-sms",
+      "name": "Send AI Reply",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [660, 660],
+      "credentials": { "twilioApi": { "id": "TWILIO_CRED", "name": "P&P Twilio" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_QUOTES_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Quotes", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Customer_Phone"],
+          "value": {
+            "Customer_Phone": "={{ $json.customer_phone }}",
+            "Last_Inbound_At": "={{ $now.toISO() }}",
+            "Last_Outbound_At": "={{ $now.toISO() }}",
+            "Conversation": "={{ $json.conversation }}",
+            "AI_Interest": "={{ $json.interest }}",
+            "AI_Intent": "={{ $json.intent }}",
+            "AI_Objection": "={{ $json.objection }}",
+            "AI_Summary": "={{ $json.summary }}",
+            "Sequence_Active": "={{ $json.sequence_active }}",
+            "Won": "={{ $json.won }}",
+            "Status": "={{ $json.new_status }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-update-reply",
+      "name": "Update Quote (Reply)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [660, 840],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "typeValidation": "loose" },
+          "conditions": [ { "leftValue": "={{ $('Parse Reply').item.json.alert_owner }}", "rightValue": "true", "operator": { "type": "boolean", "operation": "true", "singleValue": true } } ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-if-alert",
+      "name": "Owner Alert Needed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 840]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.OWNER_EMAIL }}",
+        "subject": "=🔥 {{ $('Parse Reply').item.json.interest }} quote lead – {{ $('Parse Reply').item.json.customer_name || $('Parse Reply').item.json.customer_phone }} (${{ $('Parse Reply').item.json.estimate_amount }})",
+        "emailType": "text",
+        "message": "=A customer replied to their estimate follow-up:\n\nName: {{ $('Parse Reply').item.json.customer_name }}\nPhone: {{ $('Parse Reply').item.json.customer_phone }}\nService: {{ $('Parse Reply').item.json.service_type }}\nAmount: ${{ $('Parse Reply').item.json.estimate_amount }}\nRep: {{ $('Parse Reply').item.json.assigned_rep || 'unassigned' }}\n\nInterest: {{ $('Parse Reply').item.json.interest }}\nIntent: {{ $('Parse Reply').item.json.intent }}\nWants a call: {{ $('Parse Reply').item.json.wants_call }}\nObjection: {{ $('Parse Reply').item.json.objection }}\nSummary: {{ $('Parse Reply').item.json.summary }}\n\nThey said: \"{{ $('Parse Reply').item.json.message_body }}\"\n\nWe auto-replied: \"{{ $('Parse Reply').item.json.suggested_reply }}\"\n\nJump on this one personally.",
+        "options": {}
+      },
+      "id": "node-alert-email",
+      "name": "Alert Owner Email (Reply)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1140, 760],
+      "credentials": { "gmailOAuth2": { "id": "GMAIL_CRED", "name": "P&P Gmail" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $env.TWILIO_NUMBER }}",
+        "to": "={{ $env.OWNER_PHONE }}",
+        "message": "={{ $('Parse Reply').item.json.interest }} quote lead: {{ $('Parse Reply').item.json.customer_name || $('Parse Reply').item.json.customer_phone }} (${{ $('Parse Reply').item.json.estimate_amount }}) – {{ $('Parse Reply').item.json.summary }}",
+        "options": {}
+      },
+      "id": "node-alert-sms",
+      "name": "Alert Owner SMS (Reply)",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [1140, 920],
+      "credentials": { "twilioApi": { "id": "TWILIO_CRED", "name": "P&P Twilio" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_QUOTES_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Quotes", "mode": "name" },
+        "filtersUI": { "values": [ { "lookupColumn": "Quote_ID", "lookupValue": "={{ $json.body.quote_id || $json.query.quote_id }}" } ] },
+        "options": {}
+      },
+      "id": "node-find-view",
+      "name": "Find Quote (View)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-300, 980],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Tally an estimate-view ping. Alerts the owner once views cross the threshold.\nconst c = $('Find Quote (View)').first().json || {};\nif (!c.Quote_ID) return []; // unknown quote id -> ignore\nconst views = Number(c.Views || 0) + 1;\nconst threshold = Number($env.VIEW_ALERT_THRESHOLD || 3);\nconst alreadyAlerted = String(c.View_Alerted || '').toLowerCase() === 'yes';\nconst alert = views >= threshold && !alreadyAlerted;\nreturn [{ json: { quote_id: c.Quote_ID, customer_name: c.Customer_Name || '', customer_phone: c.Customer_Phone || '', estimate_amount: c.Estimate_Amount || '', service_type: c.Service_Type || '', views, alert } }];"
+      },
+      "id": "node-tally-view",
+      "name": "Tally View",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-60, 980]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_QUOTES_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Quotes", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Quote_ID"],
+          "value": {
+            "Quote_ID": "={{ $json.quote_id }}",
+            "Views": "={{ $json.views }}",
+            "Last_Viewed_At": "={{ $now.toISO() }}",
+            "View_Alerted": "={{ $json.alert ? 'Yes' : ($('Find Quote (View)').first().json.View_Alerted || 'No') }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-update-view",
+      "name": "Update Views",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [180, 980],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "typeValidation": "loose" },
+          "conditions": [ { "leftValue": "={{ $('Tally View').item.json.alert }}", "rightValue": "true", "operator": { "type": "boolean", "operation": "true", "singleValue": true } } ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-if-view-alert",
+      "name": "Viewed Repeatedly?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [420, 980]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.OWNER_EMAIL }}",
+        "subject": "=👀 Estimate viewed {{ $('Tally View').item.json.views }}x – {{ $('Tally View').item.json.customer_name || $('Tally View').item.json.customer_phone }} (${{ $('Tally View').item.json.estimate_amount }})",
+        "emailType": "text",
+        "message": "=This customer keeps re-opening their estimate — a strong buying signal:\n\nName: {{ $('Tally View').item.json.customer_name }}\nPhone: {{ $('Tally View').item.json.customer_phone }}\nService: {{ $('Tally View').item.json.service_type }}\nAmount: ${{ $('Tally View').item.json.estimate_amount }}\nViews: {{ $('Tally View').item.json.views }}\n\nNow is a great time for a quick personal call.",
+        "options": {}
+      },
+      "id": "node-alert-view",
+      "name": "Alert Owner (Multiple Views)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [660, 980],
+      "credentials": { "gmailOAuth2": { "id": "GMAIL_CRED", "name": "P&P Gmail" } },
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Estimate Intake Webhook": { "main": [[{ "node": "Respond to Source", "type": "main", "index": 0 }, { "node": "Route Event", "type": "main", "index": 0 }]] },
+    "Route Event": {
+      "main": [
+        [{ "node": "Normalize Reply", "type": "main", "index": 0 }],
+        [{ "node": "Find Quote (View)", "type": "main", "index": 0 }],
+        [{ "node": "Normalize Estimate", "type": "main", "index": 0 }]
+      ]
+    },
+    "Normalize Estimate": { "main": [[{ "node": "Find Existing Quote", "type": "main", "index": 0 }]] },
+    "Find Existing Quote": { "main": [[{ "node": "Is New Quote?", "type": "main", "index": 0 }]] },
+    "Is New Quote?": { "main": [[{ "node": "Log New Quote", "type": "main", "index": 0 }], [{ "node": "Update Existing Quote", "type": "main", "index": 0 }]] },
+    "Log New Quote": { "main": [[{ "node": "Record Status (New)", "type": "main", "index": 0 }]] },
+    "Record Status (New)": { "main": [[{ "node": "High-Value Quote?", "type": "main", "index": 0 }]] },
+    "High-Value Quote?": { "main": [[{ "node": "Alert Owner (High-Value)", "type": "main", "index": 0 }], []] },
+    "Normalize Reply": { "main": [[{ "node": "Is Opt-Out?", "type": "main", "index": 0 }]] },
+    "Is Opt-Out?": { "main": [[{ "node": "Suppress (Opt-Out)", "type": "main", "index": 0 }], [{ "node": "Find Quote (Reply)", "type": "main", "index": 0 }]] },
+    "Find Quote (Reply)": { "main": [[{ "node": "Classify Reply (AI)", "type": "main", "index": 0 }]] },
+    "Classify Reply (AI)": { "main": [[{ "node": "Parse Reply", "type": "main", "index": 0 }]] },
+    "Parse Reply": { "main": [[{ "node": "Send AI Reply", "type": "main", "index": 0 }]] },
+    "Send AI Reply": { "main": [[{ "node": "Update Quote (Reply)", "type": "main", "index": 0 }]] },
+    "Update Quote (Reply)": { "main": [[{ "node": "Owner Alert Needed?", "type": "main", "index": 0 }]] },
+    "Owner Alert Needed?": { "main": [[{ "node": "Alert Owner Email (Reply)", "type": "main", "index": 0 }, { "node": "Alert Owner SMS (Reply)", "type": "main", "index": 0 }], []] },
+    "Find Quote (View)": { "main": [[{ "node": "Tally View", "type": "main", "index": 0 }]] },
+    "Tally View": { "main": [[{ "node": "Update Views", "type": "main", "index": 0 }]] },
+    "Update Views": { "main": [[{ "node": "Viewed Repeatedly?", "type": "main", "index": 0 }]] },
+    "Viewed Repeatedly?": { "main": [[{ "node": "Alert Owner (Multiple Views)", "type": "main", "index": 0 }], []] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true, "callerPolicy": "workflowsFromSameOwner" },
+  "active": false
+}

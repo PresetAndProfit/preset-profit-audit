@@ -14,7 +14,7 @@ Every automation in this catalog is built to be sold, installed, and supported a
 | 03 | Review & Reputation Engine | $500–750 | $297 | 0.5 day | ✅ |
 | 04 | Appointment Reminder & No-Show Recovery | $500–750 | $297 | 0.5–1 day | ✅ |
 | 05 | Database Reactivation Campaign | $1,000–1,500 | $250 + rev-share | 1 day | ✅ |
-| 06 | Estimate / Quote Follow-Up Sequence | $600–900 | $297 | 0.5–1 day | 🟡 |
+| 06 | Estimate / Quote Follow-Up Engine | $600–900 | $297 | 0.5–1 day | ✅ |
 | 07 | AI Receptionist (24/7 Voice + Chat) | $1,500–3,000 | $797–1,500 | 3–5 days | 🟡 |
 | 08 | Referral Generator | $500–750 | $247 | 0.5 day | 🟡 |
 | 09 | Invoice & Payment Reminder (AR) | $500–800 | $297 | 0.5–1 day | 🟡 |
@@ -74,13 +74,13 @@ Every automation in this catalog is built to be sold, installed, and supported a
 - **Estimated implementation time:** 1 day.
 - **Folder:** [`05-database-reactivation/`](05-database-reactivation/README.md)
 
-## 06 — Estimate / Quote Follow-Up Sequence 🟡
-- **Problem solved:** Quotes get sent and forgotten. Most contractors never follow up past once. This runs a polite multi-touch SMS/email sequence on every open estimate until won/lost.
-- **Ideal customer:** Quote-heavy trades — roofers, HVAC installs, remodelers, auto body, landscapers.
+## 06 — Estimate / Quote Follow-Up Engine ✅
+- **Problem solved:** Quotes get sent and forgotten. Most contractors never follow up past once. This captures every estimate from any source, runs a polite multi-touch SMS/email sequence (Day 1/3/7/14/21), AI-classifies replies HOT/WARM/COLD/DECLINED, and alerts the owner the moment a quote heats up — stopping on accept/decline/STOP/expiration.
+- **Ideal customer:** Quote-heavy trades — roofers, HVAC installs, plumbers, remodelers, construction, landscapers, electricians, auto body.
 - **Setup fee:** $600–900
 - **Monthly fee:** $297
 - **ROI:** Closing even 1 extra $5,000–$15,000 roof/HVAC job per month from follow-up alone is a **20x+** return.
-- **Required integrations:** n8n, quoting source (Jobber/ServiceTitan/Sheet/QuickBooks), Twilio, OpenAI, Gmail, Google Sheets.
+- **Required integrations:** n8n, quoting source (Jobber/ServiceTitan/Housecall Pro/GoHighLevel/Sheet/QuickBooks), Twilio, OpenAI, Gmail, Google Sheets.
 - **Estimated implementation time:** 0.5–1 day.
 - **Folder:** [`06-estimate-quote-followup/`](06-estimate-quote-followup/README.md)
 

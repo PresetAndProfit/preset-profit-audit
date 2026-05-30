@@ -1,0 +1,212 @@
+{
+  "name": "P&P – Estimate / Quote Follow-Up (Sequence Engine)",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [ { "field": "minutes", "minutesInterval": 15 } ] } },
+      "id": "node-cron",
+      "name": "Every 15 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-1000, 320]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_QUOTES_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Quotes", "mode": "name" },
+        "options": {}
+      },
+      "id": "node-read",
+      "name": "Read Quotes",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-760, 320],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Estimate follow-up sequence: Day 1 / 3 / 7 / 14 / 21 (configurable), SMS+Email alternating.\n// Stops on accept/decline/opt-out/terminal status, business-hours + daily-cap gated.\n// Plain Date math for version-safety (no $DateTime).\nconst openH = Number($env.BUSINESS_HOURS_START || 9);\nconst closeH = Number($env.BUSINESS_HOURS_END || 19);\nif (!($now.hour >= openH && $now.hour < closeH)) return []; // quiet/business-hours gate\nconst days = (($env.FOLLOWUP_DAYS || '1,3,7,14,21').split(',')).map(n => Number(n.trim())).filter(n => !isNaN(n));\nconst channels = (($env.FOLLOWUP_CHANNELS || 'sms,email,sms,email,sms').split(',')).map(s => s.trim().toLowerCase());\nconst maxSteps = days.length;\nconst dailyCap = Number($env.DAILY_CAP || 200);\nconst biz = $env.BUSINESS_NAME || 'us';\nconst booking = $env.BOOKING_LINK || '';\nconst nowMs = $now.toMillis();\nconst today = $now.toISODate();\nconst yes = v => String(v || '').toLowerCase() === 'yes';\nconst dateOf = v => { const t = new Date(v).getTime(); return isNaN(t) ? '' : new Date(t).toISOString().slice(0,10); };\nconst rows = $input.all().map(i => i.json);\n// Daily cap across all quotes (count today's outbound touches).\nconst sentToday = rows.filter(r => r.Last_Outbound_At && dateOf(r.Last_Outbound_At) === today).length;\nlet remaining = Math.max(0, dailyCap - sentToday);\nconst terminal = s => ['won','accepted','declined','opted out','expired','lost','complete'].some(t => s.includes(t));\nconst out = [];\nfor (const r of rows) {\n  if (remaining <= 0) break;\n  const status = String(r.Status || '').toLowerCase();\n  if (yes(r.Opted_Out)) continue;\n  if (String(r.Sequence_Active || 'Yes').toLowerCase() === 'no') continue;\n  if (terminal(status)) continue;\n  const step = Number(r.Sequence_Step || 0);\n  if (step >= maxSteps) continue;\n  const phone = String(r.Customer_Phone || '').trim();\n  const due = r.Next_Follow_Up_At ? nowMs >= new Date(r.Next_Follow_Up_At).getTime() : false;\n  if (!due) continue;\n  // Expiration guard: if the estimate has expired, stop the sequence instead of sending.\n  const expMs = r.Expiration_Date ? new Date(r.Expiration_Date).getTime() : NaN;\n  if (!isNaN(expMs) && expMs < nowMs) { out.push({ json: { ...r, _expired: true, _new_status: 'Expired', _next_followup_at: '', _next_step: step } }); continue; }\n  const nextStep = step + 1;\n  const isLast = nextStep >= maxSteps;\n  const channel = channels[step] || 'sms';\n  const first = r.Customer_Name ? (' ' + String(r.Customer_Name).split(' ')[0]) : '';\n  const svc = r.Service_Type ? ` for your ${r.Service_Type}` : '';\n  const amt = r.Estimate_Amount ? ` ($${r.Estimate_Amount})` : '';\n  const expNote = r.Expiration_Date ? ` Your quote is valid through ${dateOf(r.Expiration_Date)}.` : '';\n  const sms = isLast\n    ? `Hi${first}, last check-in from ${biz} on your estimate${svc}${amt}. We'd still love to earn your business — reply here and we'll take care of you. ${booking}`.trim()\n    : `Hi${first}, following up from ${biz} on the estimate${svc}${amt} we sent.${expNote} Any questions, or want to get scheduled? Reply here or book: ${booking}`.trim();\n  const emailSubject = `Your ${biz} estimate${svc ? ' ' + r.Service_Type : ''}${amt}`;\n  const emailBody = `Hi${first},\\n\\nJust following up on the estimate we sent you${svc}${amt}.${expNote}\\n\\nWe'd be glad to answer any questions or get you on the schedule — simply reply to this email${booking ? ' or book a time here: ' + booking : ''}.\\n\\nThanks,\\n${biz}`;\n  const gaps = days;\n  const nextGapDays = gaps[nextStep] !== undefined ? gaps[nextStep] : 0;\n  const nextAt = isLast ? '' : $now.plus({ minutes: (nextGapDays - (gaps[step] || 0)) * 1440 }).toISO();\n  out.push({ json: { ...r, _channel: (channel === 'email' && r.Customer_Email) ? 'email' : 'sms', _has_phone: !!phone, _sms_msg: sms, _email_subject: emailSubject, _email_body: emailBody, _next_step: nextStep, _is_last: isLast, _next_followup_at: nextAt, _new_status: isLast ? 'Sequence Complete - No Response' : 'Follow-Up Sent', _expired: false } });\n  remaining--;\n}\nreturn out;"
+      },
+      "id": "node-filter",
+      "name": "Find Due Follow-Ups",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-520, 320]
+    },
+    {
+      "parameters": { "batchSize": 1, "options": {} },
+      "id": "node-loop",
+      "name": "Loop Quotes",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [-280, 320]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": false, "typeValidation": "loose" },
+                "conditions": [ { "leftValue": "={{ $json._expired }}", "rightValue": "true", "operator": { "type": "boolean", "operation": "true", "singleValue": true } } ],
+                "combinator": "and"
+              },
+              "outputKey": "Expired"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": false, "typeValidation": "loose" },
+                "conditions": [ { "leftValue": "={{ $json._channel }}", "rightValue": "email", "operator": { "type": "string", "operation": "equals" } } ],
+                "combinator": "and"
+              },
+              "outputKey": "Email"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": false, "typeValidation": "loose" },
+                "conditions": [ { "leftValue": "={{ $json._channel }}", "rightValue": "sms", "operator": { "type": "string", "operation": "equals" } } ],
+                "combinator": "and"
+              },
+              "outputKey": "SMS"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "node-route",
+      "name": "Route Channel",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [-40, 320]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_QUOTES_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Quotes", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Quote_ID"],
+          "value": {
+            "Quote_ID": "={{ $json.Quote_ID }}",
+            "Status": "Expired",
+            "Sequence_Active": "No",
+            "Next_Follow_Up_At": ""
+          }
+        },
+        "options": {}
+      },
+      "id": "node-mark-expired",
+      "name": "Mark Expired",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [220, 100],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.Customer_Email }}",
+        "subject": "={{ $json._email_subject }}",
+        "emailType": "text",
+        "message": "={{ $json._email_body }}",
+        "options": {}
+      },
+      "id": "node-followup-email",
+      "name": "Send Follow-Up Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [220, 300],
+      "credentials": { "gmailOAuth2": { "id": "GMAIL_CRED", "name": "P&P Gmail" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $env.TWILIO_NUMBER }}",
+        "to": "={{ $json.Customer_Phone }}",
+        "message": "={{ $json._sms_msg }}",
+        "options": {}
+      },
+      "id": "node-followup-sms",
+      "name": "Send Follow-Up SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [220, 520],
+      "credentials": { "twilioApi": { "id": "TWILIO_CRED", "name": "P&P Twilio" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_QUOTES_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Follow_Up_Log", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Quote_ID": "={{ $json.Quote_ID }}",
+            "Sent_At": "={{ $now.toISO() }}",
+            "Step": "={{ $json._next_step }}",
+            "Channel": "={{ $json._channel }}",
+            "Message": "={{ $json._channel === 'email' ? $json._email_subject : $json._sms_msg }}",
+            "Customer_Phone": "={{ $json.Customer_Phone }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-log-followup",
+      "name": "Log Follow-Up",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [480, 410],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_QUOTES_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Quotes", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Quote_ID"],
+          "value": {
+            "Quote_ID": "={{ $json.Quote_ID }}",
+            "Sequence_Step": "={{ $json._next_step }}",
+            "Last_Outbound_At": "={{ $now.toISO() }}",
+            "Next_Follow_Up_At": "={{ $json._next_followup_at }}",
+            "Sequence_Active": "={{ $json._is_last ? 'No' : 'Yes' }}",
+            "Status": "={{ $json._new_status }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-update",
+      "name": "Update Sequence State",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [720, 410],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    }
+  ],
+  "connections": {
+    "Every 15 min": { "main": [[{ "node": "Read Quotes", "type": "main", "index": 0 }]] },
+    "Read Quotes": { "main": [[{ "node": "Find Due Follow-Ups", "type": "main", "index": 0 }]] },
+    "Find Due Follow-Ups": { "main": [[{ "node": "Loop Quotes", "type": "main", "index": 0 }]] },
+    "Loop Quotes": { "main": [[{ "node": "Route Channel", "type": "main", "index": 0 }]] },
+    "Route Channel": {
+      "main": [
+        [{ "node": "Mark Expired", "type": "main", "index": 0 }],
+        [{ "node": "Send Follow-Up Email", "type": "main", "index": 0 }],
+        [{ "node": "Send Follow-Up SMS", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Mark Expired": { "main": [[{ "node": "Loop Quotes", "type": "main", "index": 0 }]] },
+    "Send Follow-Up Email": { "main": [[{ "node": "Log Follow-Up", "type": "main", "index": 0 }]] },
+    "Send Follow-Up SMS": { "main": [[{ "node": "Log Follow-Up", "type": "main", "index": 0 }]] },
+    "Log Follow-Up": { "main": [[{ "node": "Update Sequence State", "type": "main", "index": 0 }]] },
+    "Update Sequence State": { "main": [[{ "node": "Loop Quotes", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
+  "active": false
+}

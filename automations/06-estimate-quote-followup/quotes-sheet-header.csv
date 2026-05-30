@@ -1,0 +1,1 @@
+Quote_ID,Created_At,Customer_Name,Customer_Phone,Customer_Email,Service_Type,Estimate_Amount,Estimate_Date,Expiration_Date,Assigned_Rep,Source,Status,Sequence_Step,Sequence_Active,Next_Follow_Up_At,Last_Outbound_At,Last_Inbound_At,Last_Source_Update_At,Conversation,AI_Interest,AI_Intent,AI_Objection,AI_Summary,Views,Last_Viewed_At,View_Alerted,Opted_Out,Owner_Notified,Won,Notes

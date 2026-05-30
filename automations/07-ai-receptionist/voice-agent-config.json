@@ -1,0 +1,104 @@
+{
+  "_comment": "Preset & Profit – AI Receptionist voice-agent config (Vapi schema). Import into Vapi (POST /assistant) or adapt to Retell/ElevenLabs. Replace {{PLACEHOLDERS}} per client. The four tools POST to the n8n Backend Webhook (workflow-1) — set every tool's server.url to the SAME N8N_WEBHOOK_URL; n8n routes on the tool name. Set serverUrl (assistant-level) to the same URL so end-of-call reports are logged.",
+  "name": "{{BUSINESS_NAME}} – AI Receptionist",
+  "firstMessage": "Thanks for calling {{BUSINESS_NAME}}, this is the virtual assistant. How can I help you today?",
+  "serverUrl": "{{N8N_WEBHOOK_URL}}",
+  "serverMessages": ["end-of-call-report", "tool-calls"],
+  "endCallPhrases": ["goodbye", "have a good day", "talk soon"],
+  "voice": {
+    "provider": "11labs",
+    "voiceId": "{{ELEVENLABS_VOICE_ID}}",
+    "stability": 0.5,
+    "similarityBoost": 0.75
+  },
+  "transcriber": {
+    "provider": "deepgram",
+    "model": "nova-2",
+    "language": "en"
+  },
+  "model": {
+    "provider": "openai",
+    "model": "gpt-4o",
+    "temperature": 0.4,
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are the friendly, professional virtual receptionist for {{BUSINESS_NAME}}, a {{BUSINESS_INDUSTRY}} business serving {{BUSINESS_SERVICE_AREA}}. Business hours: {{BUSINESS_HOURS_TEXT}}.\n\nYour job: greet callers warmly, answer common questions, qualify the reason for the call, and either (a) book an appointment, (b) take a message/lead, or (c) escalate a genuine emergency. Keep replies short and natural for speech — one or two sentences. Speak in plain language, never read out URLs or JSON.\n\nRULES:\n- Always collect the caller's name and phone number before booking or taking a message.\n- Never invent prices, availability, guarantees, or appointment times. To offer times, call check_availability and read back only what it returns.\n- To book, confirm the chosen time back to the caller, then call book_appointment.\n- If the caller has no time preference or you can't book, call capture_lead so the team can follow up.\n- If the caller describes an emergency ({{EMERGENCY_KEYWORDS}}), reassure them, call escalate_emergency immediately, and let them know the on-call team is being alerted.\n- If you don't know something, say you'll have a team member follow up — do not guess.\n- Confirm the spelling of names and read back phone numbers digit by digit.\n- Be brief, kind, and efficient. Close by confirming next steps."
+      }
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "check_availability",
+          "description": "Look up open appointment slots on the business calendar for a given day. Call this before offering any times.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "date": { "type": "string", "description": "The day to check, ISO date (YYYY-MM-DD) or natural language like 'tomorrow'." }
+            },
+            "required": ["date"]
+          }
+        },
+        "server": { "url": "{{N8N_WEBHOOK_URL}}" }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "book_appointment",
+          "description": "Book a confirmed appointment on the calendar. Only call after the caller has agreed to a specific time you offered.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "phone": { "type": "string", "description": "E.164 if possible, e.g. +14805550123" },
+              "email": { "type": "string" },
+              "service": { "type": "string", "description": "What the appointment is for" },
+              "start": { "type": "string", "description": "Chosen start time as ISO 8601 datetime" }
+            },
+            "required": ["name", "phone", "start"]
+          }
+        },
+        "server": { "url": "{{N8N_WEBHOOK_URL}}" }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "capture_lead",
+          "description": "Save the caller's details as a lead/message when no booking is made, so the team can follow up.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "phone": { "type": "string" },
+              "email": { "type": "string" },
+              "service": { "type": "string" },
+              "urgency": { "type": "string", "enum": ["low", "normal", "high"] },
+              "summary": { "type": "string", "description": "One-line summary of what the caller needs" }
+            },
+            "required": ["phone", "summary"]
+          }
+        },
+        "server": { "url": "{{N8N_WEBHOOK_URL}}" }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "escalate_emergency",
+          "description": "Immediately alert the on-call team about a genuine emergency (e.g. gas leak, flooding, no heat in freezing weather, electrical hazard). Use sparingly.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "phone": { "type": "string" },
+              "issue": { "type": "string", "description": "What the emergency is" },
+              "urgency": { "type": "string", "enum": ["high", "critical"] }
+            },
+            "required": ["phone", "issue"]
+          }
+        },
+        "server": { "url": "{{N8N_WEBHOOK_URL}}" }
+      }
+    ]
+  }
+}

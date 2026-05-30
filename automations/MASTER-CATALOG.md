@@ -15,7 +15,7 @@ Every automation in this catalog is built to be sold, installed, and supported a
 | 04 | Appointment Reminder & No-Show Recovery | $500–750 | $297 | 0.5–1 day | ✅ |
 | 05 | Database Reactivation Campaign | $1,000–1,500 | $250 + rev-share | 1 day | ✅ |
 | 06 | Estimate / Quote Follow-Up Engine | $600–900 | $297 | 0.5–1 day | ✅ |
-| 07 | AI Receptionist (24/7 Voice + Chat) | $1,500–3,000 | $797–1,500 | 3–5 days | 🟡 |
+| 07 | AI Receptionist (24/7 Voice + Chat) | $1,500–3,000 | $797–1,500 | 3–5 days | ✅ |
 | 08 | Referral Generator | $500–750 | $247 | 0.5 day | 🟡 |
 | 09 | Invoice & Payment Reminder (AR) | $500–800 | $297 | 0.5–1 day | 🟡 |
 | 10 | Long-Term Nurture & Newsletter Engine | $750–1,000 | $347 | 1 day | 🟡 |
@@ -84,8 +84,8 @@ Every automation in this catalog is built to be sold, installed, and supported a
 - **Estimated implementation time:** 0.5–1 day.
 - **Folder:** [`06-estimate-quote-followup/`](06-estimate-quote-followup/README.md)
 
-## 07 — AI Receptionist (24/7 Voice + Chat) 🟡
-- **Problem solved:** No one to answer calls/chats after hours or during rushes. An AI voice + web-chat agent answers, qualifies, books appointments, and escalates emergencies.
+## 07 — AI Receptionist (24/7 Voice + Chat) ✅
+- **Problem solved:** No one to answer calls/chats after hours or during rushes. An AI voice + web-chat agent answers, qualifies, books onto the real calendar, captures leads, and escalates genuine emergencies to a human (voice layer Vapi/Retell + n8n backend brain).
 - **Ideal customer:** Businesses losing after-hours/overflow calls — HVAC, plumbing, dental, real estate, high-volume restaurants.
 - **Setup fee:** $1,500–3,000 (premium flagship)
 - **Monthly fee:** $797–1,500

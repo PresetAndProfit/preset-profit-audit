@@ -1,0 +1,519 @@
+{
+  "name": "P&P – AI Receptionist (Backend / Tools)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "receptionist",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-webhook",
+      "name": "Backend Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-1200, 480],
+      "webhookId": "receptionist"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize a request from the voice layer (Vapi/Retell tool call or end-of-call report)\n// or the web-chat widget. Produces a unified { action, args, tool_call_id, channel }.\nconst b = $json.body || {};\nlet action = '', args = {}, toolCallId = '';\nconst tc = (b.message && (b.message.toolCalls || b.message.tool_calls) || b.toolCalls || [])[0];\nif (tc) {\n  action = (tc.function && tc.function.name) || tc.name || '';\n  toolCallId = tc.id || '';\n  let a = (tc.function && tc.function.arguments) ?? tc.arguments ?? {};\n  if (typeof a === 'string') { try { a = JSON.parse(a); } catch (e) { a = {}; } }\n  args = a || {};\n} else if (b.message && /end-of-call/i.test(b.message.type || '')) {\n  const m = b.message;\n  action = 'end_of_call';\n  args = { summary: m.summary || '', transcript: m.transcript || '', recording_url: m.recordingUrl || m.recording_url || '', phone: (m.customer && m.customer.number) || '', ended_reason: m.endedReason || '' };\n} else {\n  action = b.action || b.event || ($json.query && $json.query.action) || '';\n  args = b.args || b;\n  toolCallId = b.tool_call_id || b.toolCallId || '';\n}\nconst channel = b.channel || (action === 'chat_message' ? 'chat' : 'voice');\nreturn [{ json: { action: String(action || '').toLowerCase(), args, tool_call_id: toolCallId, channel } }];"
+      },
+      "id": "node-normalize",
+      "name": "Normalize Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-980, 480]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            { "conditions": { "options": { "caseSensitive": false, "typeValidation": "loose" }, "conditions": [ { "leftValue": "={{ $json.action }}", "rightValue": "check_availability", "operator": { "type": "string", "operation": "equals" } } ], "combinator": "and" }, "outputKey": "check_availability" },
+            { "conditions": { "options": { "caseSensitive": false, "typeValidation": "loose" }, "conditions": [ { "leftValue": "={{ $json.action }}", "rightValue": "book_appointment", "operator": { "type": "string", "operation": "equals" } } ], "combinator": "and" }, "outputKey": "book_appointment" },
+            { "conditions": { "options": { "caseSensitive": false, "typeValidation": "loose" }, "conditions": [ { "leftValue": "={{ $json.action }}", "rightValue": "capture_lead", "operator": { "type": "string", "operation": "equals" } } ], "combinator": "and" }, "outputKey": "capture_lead" },
+            { "conditions": { "options": { "caseSensitive": false, "typeValidation": "loose" }, "conditions": [ { "leftValue": "={{ $json.action }}", "rightValue": "escalate_emergency", "operator": { "type": "string", "operation": "equals" } } ], "combinator": "and" }, "outputKey": "escalate_emergency" },
+            { "conditions": { "options": { "caseSensitive": false, "typeValidation": "loose" }, "conditions": [ { "leftValue": "={{ $json.action }}", "rightValue": "end_of_call", "operator": { "type": "string", "operation": "equals" } } ], "combinator": "and" }, "outputKey": "end_of_call" },
+            { "conditions": { "options": { "caseSensitive": false, "typeValidation": "loose" }, "conditions": [ { "leftValue": "={{ $json.action }}", "rightValue": "chat_message", "operator": { "type": "string", "operation": "equals" } } ], "combinator": "and" }, "outputKey": "chat_message" }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "node-route",
+      "name": "Route Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [-760, 480]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compute the business-hours window (ISO) for the requested day to query the calendar.\nconst a = $('Normalize Request').item.json.args || {};\nconst tz = $env.TIMEZONE || 'America/New_York';\nconst openH = Number($env.BUSINESS_HOURS_START || 9);\nconst closeH = Number($env.BUSINESS_HOURS_END || 18);\n// Resolve requested date: explicit date arg, else tomorrow.\nlet base = a.date || a.day || '';\nlet d = base ? new Date(base) : new Date($now.plus({ days: 1 }).toISO());\nif (isNaN(d.getTime())) d = new Date($now.plus({ days: 1 }).toISO());\nconst yyyy = d.getUTCFullYear(); const mm = String(d.getUTCMonth()+1).padStart(2,'0'); const dd = String(d.getUTCDate()).padStart(2,'0');\nconst dayISO = `${yyyy}-${mm}-${dd}`;\nreturn [{ json: { day: dayISO, timeMin: `${dayISO}T00:00:00`, timeMax: `${dayISO}T23:59:59`, open_h: openH, close_h: closeH, tz, tool_call_id: $('Normalize Request').item.json.tool_call_id || '' } }];"
+      },
+      "id": "node-daybounds",
+      "name": "Day Bounds",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-520, 60]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "calendar": { "__rl": true, "value": "={{ $env.GOOGLE_CALENDAR_ID }}", "mode": "id" },
+        "returnAll": false,
+        "limit": 50,
+        "options": {
+          "timeMin": "={{ $json.timeMin }}",
+          "timeMax": "={{ $json.timeMax }}",
+          "singleEvents": true,
+          "orderBy": "startTime"
+        }
+      },
+      "id": "node-getevents",
+      "name": "Get Calendar Events",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [-300, 60],
+      "credentials": { "googleCalendarOAuth2Api": { "id": "GCAL_CRED", "name": "P&P Google Calendar" } },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build open slots within business hours, skipping busy events and times too soon.\nconst db = $('Day Bounds').item.json;\nconst slotMin = Number($env.SLOT_MINUTES || 60);\nconst leadMin = Number($env.BOOKING_LEAD_MIN || 120);\nconst maxSlots = Number($env.MAX_SLOTS_OFFERED || 5);\nconst tz = db.tz;\nconst dayStart = new Date(`${db.day}T${String(db.open_h).padStart(2,'0')}:00:00`).getTime();\nconst dayEnd = new Date(`${db.day}T${String(db.close_h).padStart(2,'0')}:00:00`).getTime();\nconst earliest = $now.toMillis() + leadMin * 60000;\nconst busy = $('Get Calendar Events').all().map(i => i.json).filter(e => e && (e.start || e.end)).map(e => {\n  const s = new Date((e.start && (e.start.dateTime || e.start.date)) || 0).getTime();\n  const en = new Date((e.end && (e.end.dateTime || e.end.date)) || 0).getTime();\n  return { s, en };\n}).filter(b => !isNaN(b.s) && !isNaN(b.en));\nconst slots = [];\nfor (let t = dayStart; t + slotMin*60000 <= dayEnd && slots.length < maxSlots; t += slotMin*60000) {\n  if (t < earliest) continue;\n  const end = t + slotMin*60000;\n  const overlaps = busy.some(b => t < b.en && end > b.s);\n  if (overlaps) continue;\n  slots.push(new Date(t).toLocaleString('en-US', { timeZone: tz, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }));\n}\nconst result = slots.length ? `Available times on ${new Date(dayStart).toLocaleDateString('en-US',{ timeZone: tz, weekday:'long', month:'long', day:'numeric' })}: ${slots.join('; ')}.` : `No open slots that day. Offer another day or take a message.`;\nreturn [{ json: { tool_call_id: db.tool_call_id, _result: result, slots } }];"
+      },
+      "id": "node-slots",
+      "name": "Compute Open Slots",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-80, 60]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare a booking from the tool args.\nconst a = $('Normalize Request').item.json.args || {};\nconst tz = $env.TIMEZONE || 'America/New_York';\nconst slotMin = Number($env.SLOT_MINUTES || 60);\nconst startRaw = a.start || a.datetime || a.preferred_time || a.time || '';\nconst startMs = new Date(startRaw).getTime();\nconst start = isNaN(startMs) ? '' : new Date(startMs).toISOString();\nconst end = isNaN(startMs) ? '' : new Date(startMs + slotMin*60000).toISOString();\nconst phone = String(a.phone || a.caller_phone || '').trim();\nconst name = a.name || a.customer_name || '';\nconst email = a.email || '';\nconst service = a.service || a.service_type || a.reason || '';\nconst digits = phone.replace(/[^0-9]/g, '');\nconst booking_id = `${$now.toMillis()}-${digits.slice(-4)}`;\nconst start_human = start ? new Date(start).toLocaleString('en-US', { timeZone: tz, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'the requested time';\nconst biz = $env.BUSINESS_NAME || 'us';\nreturn [{ json: { booking_id, start_iso: start, end_iso: end, start_human, name, phone, email, service, tool_call_id: $('Normalize Request').item.json.tool_call_id || '', summary: `${service || 'Appointment'} - ${name || phone}`, description: `Booked by the AI receptionist for ${biz}.\\nName: ${name}\\nPhone: ${phone}\\nEmail: ${email}\\nService: ${service}` } }];"
+      },
+      "id": "node-prep",
+      "name": "Prep Booking",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-520, 260]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "calendar": { "__rl": true, "value": "={{ $env.GOOGLE_CALENDAR_ID }}", "mode": "id" },
+        "start": "={{ $json.start_iso }}",
+        "end": "={{ $json.end_iso }}",
+        "additionalFields": {
+          "summary": "={{ $json.summary }}",
+          "description": "={{ $json.description }}"
+        }
+      },
+      "id": "node-createevent",
+      "name": "Create Calendar Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [-300, 260],
+      "credentials": { "googleCalendarOAuth2Api": { "id": "GCAL_CRED", "name": "P&P Google Calendar" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_RECEPTIONIST_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Bookings", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Booking_ID": "={{ $('Prep Booking').item.json.booking_id }}",
+            "Created_At": "={{ $now.toISO() }}",
+            "Customer_Name": "={{ $('Prep Booking').item.json.name }}",
+            "Customer_Phone": "={{ $('Prep Booking').item.json.phone }}",
+            "Customer_Email": "={{ $('Prep Booking').item.json.email }}",
+            "Service": "={{ $('Prep Booking').item.json.service }}",
+            "Appt_Start": "={{ $('Prep Booking').item.json.start_iso }}",
+            "Appt_End": "={{ $('Prep Booking').item.json.end_iso }}",
+            "Calendar_Event_ID": "={{ $('Create Calendar Event').item.json.id || '' }}",
+            "Source": "AI Receptionist",
+            "Status": "Booked"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-logbooking",
+      "name": "Log Booking",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-80, 260],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.OWNER_EMAIL }}",
+        "subject": "=📅 New booking via AI receptionist – {{ $('Prep Booking').item.json.name || $('Prep Booking').item.json.phone }}",
+        "emailType": "text",
+        "message": "=The AI receptionist booked an appointment:\n\nName: {{ $('Prep Booking').item.json.name }}\nPhone: {{ $('Prep Booking').item.json.phone }}\nEmail: {{ $('Prep Booking').item.json.email }}\nService: {{ $('Prep Booking').item.json.service }}\nWhen: {{ $('Prep Booking').item.json.start_human }}\n\nIt's on the calendar.",
+        "options": {}
+      },
+      "id": "node-notifybooking",
+      "name": "Notify Owner (Booking)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [140, 260],
+      "credentials": { "gmailOAuth2": { "id": "GMAIL_CRED", "name": "P&P Gmail" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "b1", "name": "tool_call_id", "value": "={{ $('Prep Booking').item.json.tool_call_id }}", "type": "string" },
+            { "id": "b2", "name": "_result", "value": "=Booked. {{ $('Prep Booking').item.json.name || 'You' }} are confirmed for {{ $('Prep Booking').item.json.start_human }}. We'll send a confirmation shortly.", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-resbooking",
+      "name": "Build Booking Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [380, 260]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_RECEPTIONIST_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Leads", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Lead_ID": "={{ $now.toMillis() }}-{{ String($('Normalize Request').item.json.args.phone || '').replace(/[^0-9]/g,'').slice(-4) }}",
+            "Created_At": "={{ $now.toISO() }}",
+            "Customer_Name": "={{ $('Normalize Request').item.json.args.name || $('Normalize Request').item.json.args.customer_name || '' }}",
+            "Customer_Phone": "={{ $('Normalize Request').item.json.args.phone || $('Normalize Request').item.json.args.caller_phone || '' }}",
+            "Customer_Email": "={{ $('Normalize Request').item.json.args.email || '' }}",
+            "Service": "={{ $('Normalize Request').item.json.args.service || $('Normalize Request').item.json.args.reason || '' }}",
+            "Urgency": "={{ $('Normalize Request').item.json.args.urgency || 'normal' }}",
+            "Summary": "={{ $('Normalize Request').item.json.args.summary || $('Normalize Request').item.json.args.message || '' }}",
+            "Channel": "={{ $('Normalize Request').item.json.channel }}",
+            "Status": "New"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-loglead",
+      "name": "Log Lead",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-520, 480],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "l1", "name": "tool_call_id", "value": "={{ $('Normalize Request').item.json.tool_call_id }}", "type": "string" },
+            { "id": "l2", "name": "_result", "value": "=Got it — I've taken down your details and our team will follow up. Thank you!", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-reslead",
+      "name": "Build Lead Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-80, 480]
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $env.TWILIO_NUMBER }}",
+        "to": "={{ $env.OWNER_PHONE }}",
+        "message": "=🚨 EMERGENCY via AI receptionist: {{ $('Normalize Request').item.json.args.name || $('Normalize Request').item.json.args.phone || 'caller' }} – {{ $('Normalize Request').item.json.args.issue || $('Normalize Request').item.json.args.summary || 'urgent issue' }}. Call back now.",
+        "options": {}
+      },
+      "id": "node-emsms",
+      "name": "Alert Owner SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [-520, 700],
+      "credentials": { "twilioApi": { "id": "TWILIO_CRED", "name": "P&P Twilio" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.OWNER_EMAIL }}",
+        "subject": "=🚨 EMERGENCY call – {{ $('Normalize Request').item.json.args.name || $('Normalize Request').item.json.args.phone }}",
+        "emailType": "text",
+        "message": "=The AI receptionist flagged an EMERGENCY:\n\nName: {{ $('Normalize Request').item.json.args.name }}\nPhone: {{ $('Normalize Request').item.json.args.phone }}\nIssue: {{ $('Normalize Request').item.json.args.issue || $('Normalize Request').item.json.args.summary }}\nUrgency: {{ $('Normalize Request').item.json.args.urgency || 'high' }}\n\nCall the customer back immediately.",
+        "options": {}
+      },
+      "id": "node-ememail",
+      "name": "Alert Owner Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [-300, 700],
+      "credentials": { "gmailOAuth2": { "id": "GMAIL_CRED", "name": "P&P Gmail" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_RECEPTIONIST_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Escalations", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Escalation_ID": "={{ $now.toMillis() }}",
+            "At": "={{ $now.toISO() }}",
+            "Customer_Name": "={{ $('Normalize Request').item.json.args.name || '' }}",
+            "Customer_Phone": "={{ $('Normalize Request').item.json.args.phone || '' }}",
+            "Issue": "={{ $('Normalize Request').item.json.args.issue || $('Normalize Request').item.json.args.summary || '' }}",
+            "Urgency": "={{ $('Normalize Request').item.json.args.urgency || 'high' }}",
+            "Notified": "Yes"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-logesc",
+      "name": "Log Escalation",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-80, 700],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "e1", "name": "tool_call_id", "value": "={{ $('Normalize Request').item.json.tool_call_id }}", "type": "string" },
+            { "id": "e2", "name": "transfer_to", "value": "={{ $env.FORWARD_NUMBER || '' }}", "type": "string" },
+            { "id": "e3", "name": "_result", "value": "=I've alerted our on-call team about your emergency right now.{{ $env.FORWARD_NUMBER ? ' I can connect you to them — please hold.' : ' Someone will call you back within minutes.' }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-resesc",
+      "name": "Build Escalation Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [380, 700]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_RECEPTIONIST_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Calls", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Call_ID": "={{ $now.toMillis() }}",
+            "Started_At": "={{ $now.toISO() }}",
+            "Caller_Phone": "={{ $('Normalize Request').item.json.args.phone || '' }}",
+            "Channel": "voice",
+            "Outcome": "={{ $('Normalize Request').item.json.args.ended_reason || 'completed' }}",
+            "Summary": "={{ $('Normalize Request').item.json.args.summary || '' }}",
+            "Transcript": "={{ $('Normalize Request').item.json.args.transcript || '' }}",
+            "Recording_URL": "={{ $('Normalize Request').item.json.args.recording_url || '' }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-logcall",
+      "name": "Log Call",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-520, 920],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "c1", "name": "tool_call_id", "value": "={{ $('Normalize Request').item.json.tool_call_id }}", "type": "string" },
+            { "id": "c2", "name": "_result", "value": "logged", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-rescall",
+      "name": "Build Call Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-80, 920]
+    },
+    {
+      "parameters": {
+        "modelId": { "__rl": true, "value": "gpt-4o", "mode": "list" },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "=You are the friendly, professional virtual receptionist for {{ $env.BUSINESS_NAME }}, a {{ $env.BUSINESS_INDUSTRY }} business serving {{ $env.BUSINESS_SERVICE_AREA }}. Hours: {{ $env.BUSINESS_HOURS_TEXT }}. You answer web-chat visitors, qualify them, answer common questions, and help them book or leave a message. Be concise and warm. Never invent prices, availability, or promises. If the visitor describes an emergency ({{ $env.EMERGENCY_KEYWORDS }}), set escalate=true. Return STRICT JSON only. Schema: {\"reply\":\"1-3 sentence chat reply\",\"intent\":\"booking|question|quote|emergency|not_interested|other\",\"name\":\"if given\",\"phone\":\"if given\",\"email\":\"if given\",\"service\":\"short phrase\",\"preferred_time\":\"if given\",\"ready_to_book\":true|false,\"escalate\":true|false,\"summary\":\"one sentence for the owner\"}. No text outside the JSON object."
+            },
+            { "role": "user", "content": "=Conversation so far:\n{{ $('Normalize Request').item.json.args.history || 'none' }}\n\nVisitor: \"{{ $('Normalize Request').item.json.args.message || $('Normalize Request').item.json.args.text || '' }}\"" }
+          ]
+        },
+        "jsonOutput": true,
+        "options": { "temperature": 0.4 }
+      },
+      "id": "node-chatai",
+      "name": "Chat AI",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [-520, 1140],
+      "credentials": { "openAiApi": { "id": "OPENAI_CRED", "name": "P&P OpenAI" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ai = $('Chat AI').first().json.message?.content ?? $('Chat AI').first().json;\nlet p;\ntry { p = typeof ai === 'string' ? JSON.parse(ai) : ai; }\ncatch (e) { p = { reply: 'Thanks for reaching out! A team member will follow up with you shortly.', intent: 'other', name: '', phone: '', email: '', service: '', preferred_time: '', ready_to_book: false, escalate: false, summary: 'Could not parse AI output' }; }\nreturn [{ json: { tool_call_id: $('Normalize Request').item.json.tool_call_id || '', _result: p.reply || 'Thanks!', intent: p.intent || 'other', name: p.name || '', phone: p.phone || '', email: p.email || '', service: p.service || '', preferred_time: p.preferred_time || '', ready_to_book: !!p.ready_to_book, escalate: !!p.escalate, summary: p.summary || '' } }];"
+      },
+      "id": "node-parsechat",
+      "name": "Parse Chat",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-300, 1140]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_RECEPTIONIST_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Calls", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Call_ID": "={{ $now.toMillis() }}",
+            "Started_At": "={{ $now.toISO() }}",
+            "Caller_Phone": "={{ $('Parse Chat').item.json.phone }}",
+            "Caller_Name": "={{ $('Parse Chat').item.json.name }}",
+            "Channel": "chat",
+            "Intent": "={{ $('Parse Chat').item.json.intent }}",
+            "Summary": "={{ $('Parse Chat').item.json.summary }}",
+            "Escalated": "={{ $('Parse Chat').item.json.escalate }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-logchat",
+      "name": "Log Chat",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-80, 1140],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "typeValidation": "loose" },
+          "conditions": [ { "leftValue": "={{ $('Parse Chat').item.json.escalate }}", "rightValue": "true", "operator": { "type": "boolean", "operation": "true", "singleValue": true } } ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-chatesc",
+      "name": "Chat Escalate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [140, 1140]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.OWNER_EMAIL }}",
+        "subject": "=🚨 Web-chat emergency – {{ $('Parse Chat').item.json.name || $('Parse Chat').item.json.phone || 'visitor' }}",
+        "emailType": "text",
+        "message": "=The web-chat receptionist flagged an urgent message:\n\nName: {{ $('Parse Chat').item.json.name }}\nPhone: {{ $('Parse Chat').item.json.phone }}\nService: {{ $('Parse Chat').item.json.service }}\nSummary: {{ $('Parse Chat').item.json.summary }}\n\nFollow up right away.",
+        "options": {}
+      },
+      "id": "node-chatescalert",
+      "name": "Alert Owner (Chat)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [380, 1040],
+      "credentials": { "gmailOAuth2": { "id": "GMAIL_CRED", "name": "P&P Gmail" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "ch1", "name": "tool_call_id", "value": "={{ $('Parse Chat').item.json.tool_call_id }}", "type": "string" },
+            { "id": "ch2", "name": "_result", "value": "={{ $('Parse Chat').item.json._result }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-reschat",
+      "name": "Build Chat Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [620, 1140]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "f1", "name": "tool_call_id", "value": "={{ $('Normalize Request').item.json.tool_call_id }}", "type": "string" },
+            { "id": "f2", "name": "_result", "value": "=I'm sorry, I didn't catch that. Could you rephrase, or would you like me to take a message for the team?", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-resfallback",
+      "name": "Build Fallback Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-520, 1360]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.tool_call_id ? { results: [ { toolCallId: $json.tool_call_id, result: $json._result } ] } : { result: $json._result } }}",
+        "options": {}
+      },
+      "id": "node-respond",
+      "name": "Respond to Agent",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [900, 560]
+    }
+  ],
+  "connections": {
+    "Backend Webhook": { "main": [[{ "node": "Normalize Request", "type": "main", "index": 0 }]] },
+    "Normalize Request": { "main": [[{ "node": "Route Action", "type": "main", "index": 0 }]] },
+    "Route Action": {
+      "main": [
+        [{ "node": "Day Bounds", "type": "main", "index": 0 }],
+        [{ "node": "Prep Booking", "type": "main", "index": 0 }],
+        [{ "node": "Log Lead", "type": "main", "index": 0 }],
+        [{ "node": "Alert Owner SMS", "type": "main", "index": 0 }],
+        [{ "node": "Log Call", "type": "main", "index": 0 }],
+        [{ "node": "Chat AI", "type": "main", "index": 0 }],
+        [{ "node": "Build Fallback Result", "type": "main", "index": 0 }]
+      ]
+    },
+    "Day Bounds": { "main": [[{ "node": "Get Calendar Events", "type": "main", "index": 0 }]] },
+    "Get Calendar Events": { "main": [[{ "node": "Compute Open Slots", "type": "main", "index": 0 }]] },
+    "Compute Open Slots": { "main": [[{ "node": "Respond to Agent", "type": "main", "index": 0 }]] },
+    "Prep Booking": { "main": [[{ "node": "Create Calendar Event", "type": "main", "index": 0 }]] },
+    "Create Calendar Event": { "main": [[{ "node": "Log Booking", "type": "main", "index": 0 }]] },
+    "Log Booking": { "main": [[{ "node": "Notify Owner (Booking)", "type": "main", "index": 0 }]] },
+    "Notify Owner (Booking)": { "main": [[{ "node": "Build Booking Result", "type": "main", "index": 0 }]] },
+    "Build Booking Result": { "main": [[{ "node": "Respond to Agent", "type": "main", "index": 0 }]] },
+    "Log Lead": { "main": [[{ "node": "Build Lead Result", "type": "main", "index": 0 }]] },
+    "Build Lead Result": { "main": [[{ "node": "Respond to Agent", "type": "main", "index": 0 }]] },
+    "Alert Owner SMS": { "main": [[{ "node": "Alert Owner Email", "type": "main", "index": 0 }]] },
+    "Alert Owner Email": { "main": [[{ "node": "Log Escalation", "type": "main", "index": 0 }]] },
+    "Log Escalation": { "main": [[{ "node": "Build Escalation Result", "type": "main", "index": 0 }]] },
+    "Build Escalation Result": { "main": [[{ "node": "Respond to Agent", "type": "main", "index": 0 }]] },
+    "Log Call": { "main": [[{ "node": "Build Call Result", "type": "main", "index": 0 }]] },
+    "Build Call Result": { "main": [[{ "node": "Respond to Agent", "type": "main", "index": 0 }]] },
+    "Chat AI": { "main": [[{ "node": "Parse Chat", "type": "main", "index": 0 }]] },
+    "Parse Chat": { "main": [[{ "node": "Log Chat", "type": "main", "index": 0 }]] },
+    "Log Chat": { "main": [[{ "node": "Chat Escalate?", "type": "main", "index": 0 }]] },
+    "Chat Escalate?": { "main": [[{ "node": "Alert Owner (Chat)", "type": "main", "index": 0 }], [{ "node": "Build Chat Result", "type": "main", "index": 0 }]] },
+    "Alert Owner (Chat)": { "main": [[{ "node": "Build Chat Result", "type": "main", "index": 0 }]] },
+    "Build Chat Result": { "main": [[{ "node": "Respond to Agent", "type": "main", "index": 0 }]] },
+    "Build Fallback Result": { "main": [[{ "node": "Respond to Agent", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true, "callerPolicy": "workflowsFromSameOwner" },
+  "active": false
+}

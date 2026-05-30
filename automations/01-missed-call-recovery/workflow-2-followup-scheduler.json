@@ -1,0 +1,98 @@
+{
+  "name": "P&P – Missed Call Recovery (Follow-Up Scheduler)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [ { "field": "minutes", "minutesInterval": 15 } ] }
+      },
+      "id": "node-cron",
+      "name": "Every 15 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-820, 300]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_LEADS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Leads", "mode": "name" },
+        "options": {}
+      },
+      "id": "node-read-all",
+      "name": "Read All Leads",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-580, 300],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const maxFollowUps = Number($env.MAX_FOLLOW_UPS || 2);\nconst now = $now;\nconst out = [];\nfor (const item of $input.all()) {\n  const l = item.json;\n  const status = (l.Status || '').toLowerCase();\n  const awaiting = status.includes('awaiting reply') || status.includes('followed up');\n  const count = Number(l.Follow_Up_Count || 0);\n  const hasReplied = !!l.Last_Inbound_At;\n  const due = l.Next_Follow_Up_At ? now >= $DateTime.fromISO(l.Next_Follow_Up_At) : false;\n  if (awaiting && !hasReplied && count < maxFollowUps && due) {\n    out.push({ json: { ...l, _next_count: count + 1, _is_last: (count + 1) >= maxFollowUps } });\n  }\n}\nreturn out;"
+      },
+      "id": "node-filter",
+      "name": "Filter Due Follow-Ups",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-340, 300]
+    },
+    {
+      "parameters": { "batchSize": 1, "options": {} },
+      "id": "node-loop",
+      "name": "Loop Leads",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [-100, 300]
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $env.TWILIO_NUMBER }}",
+        "to": "={{ $json.Customer_Phone }}",
+        "message": "={{ $json._is_last ? 'Just following up one last time — still happy to help whenever you are ready. Reply here or call us back anytime. – ' + $env.BUSINESS_NAME : 'Hi again, just checking in from ' + $env.BUSINESS_NAME + '. Did you still need help? Reply here and we will get you taken care of.' }}",
+        "options": {}
+      },
+      "id": "node-followup-sms",
+      "name": "Send Follow-Up SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [160, 300],
+      "credentials": { "twilioApi": { "id": "TWILIO_CRED", "name": "P&P Twilio" } }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_LEADS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Leads", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Customer_Phone"],
+          "value": {
+            "Customer_Phone": "={{ $json.Customer_Phone }}",
+            "Follow_Up_Count": "={{ $json._next_count }}",
+            "Last_Outbound_At": "={{ $now.toISO() }}",
+            "Next_Follow_Up_At": "={{ $json._is_last ? '' : $now.plus({ minutes: Number($env.FOLLOW_UP_GAP_MIN || 1440) }).toISO() }}",
+            "Status": "={{ $json._is_last ? 'Cold - No Response' : 'Followed Up' }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-update-followup",
+      "name": "Update Follow-Up State",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [420, 300],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    }
+  ],
+  "connections": {
+    "Every 15 min": { "main": [[{ "node": "Read All Leads", "type": "main", "index": 0 }]] },
+    "Read All Leads": { "main": [[{ "node": "Filter Due Follow-Ups", "type": "main", "index": 0 }]] },
+    "Filter Due Follow-Ups": { "main": [[{ "node": "Loop Leads", "type": "main", "index": 0 }]] },
+    "Loop Leads": { "main": [[{ "node": "Send Follow-Up SMS", "type": "main", "index": 0 }]] },
+    "Send Follow-Up SMS": { "main": [[{ "node": "Update Follow-Up State", "type": "main", "index": 0 }]] },
+    "Update Follow-Up State": { "main": [[{ "node": "Loop Leads", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
+  "active": false
+}

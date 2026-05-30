@@ -1,0 +1,340 @@
+{
+  "name": "P&P – Missed Call Recovery (Core)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "missed-call-recovery",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-webhook",
+      "name": "Twilio Inbound Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-820, 300],
+      "webhookId": "missed-call-recovery"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": false, "typeValidation": "loose" },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.Body }}",
+                    "rightValue": "",
+                    "operator": { "type": "string", "operation": "notEmpty" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "SMS Reply"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": false, "typeValidation": "loose" },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.DialCallStatus || $json.body.CallStatus }}",
+                    "rightValue": "no-answer,busy,failed,canceled",
+                    "operator": { "type": "string", "operation": "regex" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "Missed Call"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "node-switch",
+      "name": "Route Event",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [-580, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "a1", "name": "customer_phone", "value": "={{ $json.body.From || $json.body.Caller }}", "type": "string" },
+            { "id": "a2", "name": "business_phone", "value": "={{ $json.body.To || $json.body.Called }}", "type": "string" },
+            { "id": "a3", "name": "caller_city", "value": "={{ $json.body.FromCity || '' }}", "type": "string" },
+            { "id": "a4", "name": "call_sid", "value": "={{ $json.body.CallSid }}", "type": "string" },
+            { "id": "a5", "name": "call_status", "value": "={{ $json.body.DialCallStatus || $json.body.CallStatus }}", "type": "string" },
+            { "id": "a6", "name": "received_at", "value": "={{ $now.toISO() }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-normalize-call",
+      "name": "Normalize Missed Call",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-340, 160]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_LEADS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Leads", "mode": "name" },
+        "filtersUI": {
+          "values": [
+            { "lookupColumn": "Customer_Phone", "lookupValue": "={{ $json.customer_phone }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-find-lead-call",
+      "name": "Find Existing Lead (Call)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-100, 160],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "typeValidation": "loose" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.Customer_Phone }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "empty" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-is-new",
+      "name": "Is New Lead?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [160, 160]
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $('Normalize Missed Call').item.json.business_phone }}",
+        "to": "={{ $('Normalize Missed Call').item.json.customer_phone }}",
+        "message": "Hi, this is {{ $env.BUSINESS_NAME }}. Sorry we missed your call! How can we help? Reply here and a team member will take care of you right away.",
+        "options": {}
+      },
+      "id": "node-first-sms",
+      "name": "Send First SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [420, 80],
+      "credentials": { "twilioApi": { "id": "TWILIO_CRED", "name": "P&P Twilio" } }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_LEADS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Leads", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Lead_ID": "={{ $now.toMillis() }}-{{ $('Normalize Missed Call').item.json.customer_phone.slice(-4) }}",
+            "Created_At": "={{ $('Normalize Missed Call').item.json.received_at }}",
+            "Customer_Phone": "={{ $('Normalize Missed Call').item.json.customer_phone }}",
+            "Caller_City": "={{ $('Normalize Missed Call').item.json.caller_city }}",
+            "Source": "Missed Call",
+            "Call_Status": "={{ $('Normalize Missed Call').item.json.call_status }}",
+            "First_SMS_At": "={{ $now.toISO() }}",
+            "Conversation": "OUT: Sorry we missed your call! How can we help?",
+            "Status": "Contacted - Awaiting Reply",
+            "Follow_Up_Count": "0",
+            "Next_Follow_Up_At": "={{ $now.plus({ minutes: 30 }).toISO() }}",
+            "Owner_Notified": "No",
+            "Booked": "No"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-log-lead",
+      "name": "Log New Lead",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [680, 80],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "b1", "name": "customer_phone", "value": "={{ $json.body.From }}", "type": "string" },
+            { "id": "b2", "name": "business_phone", "value": "={{ $json.body.To }}", "type": "string" },
+            { "id": "b3", "name": "message_body", "value": "={{ $json.body.Body }}", "type": "string" },
+            { "id": "b4", "name": "message_sid", "value": "={{ $json.body.MessageSid }}", "type": "string" },
+            { "id": "b5", "name": "received_at", "value": "={{ $now.toISO() }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-normalize-reply",
+      "name": "Normalize Reply",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-340, 460]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_LEADS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Leads", "mode": "name" },
+        "filtersUI": {
+          "values": [
+            { "lookupColumn": "Customer_Phone", "lookupValue": "={{ $json.customer_phone }}" }
+          ]
+        },
+        "options": { "returnFirstMatch": false }
+      },
+      "id": "node-find-lead-reply",
+      "name": "Find Lead (Reply)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-100, 460],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "modelId": { "__rl": true, "value": "gpt-4o-mini", "mode": "list" },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "=You are the lead qualification assistant for {{ $env.BUSINESS_NAME }}, a {{ $env.BUSINESS_INDUSTRY }} business serving {{ $env.BUSINESS_SERVICE_AREA }}. Analyze the customer's reply and return STRICT JSON only. Schema: {\"intent\":\"booking|quote|question|spam|not_interested|other\",\"service_needed\":\"short phrase\",\"urgency\":\"emergency|high|medium|low\",\"qualified\":true|false,\"lead_score\":0-100,\"summary\":\"one sentence for the owner\",\"suggested_reply\":\"warm 1-2 sentence SMS reply under 320 chars that moves toward booking; include the booking link {{ $env.BOOKING_LINK }} when intent is booking or quote\"}. qualified=true only if a real prospect wants service. No text outside the JSON object."
+            },
+            {
+              "role": "user",
+              "content": "=Prior conversation:\n{{ $('Find Lead (Reply)').first().json.Conversation || 'none' }}\n\nNew customer reply:\n\"{{ $('Normalize Reply').item.json.message_body }}\""
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": { "temperature": 0.3 }
+      },
+      "id": "node-openai",
+      "name": "Qualify Lead (AI)",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [160, 460],
+      "credentials": { "openAiApi": { "id": "OPENAI_CRED", "name": "P&P OpenAI" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ai = $('Qualify Lead (AI)').first().json.message?.content ?? $('Qualify Lead (AI)').first().json;\nlet parsed;\ntry { parsed = typeof ai === 'string' ? JSON.parse(ai) : ai; }\ncatch (e) { parsed = { intent: 'other', service_needed: '', urgency: 'medium', qualified: false, lead_score: 0, summary: 'Could not parse AI output', suggested_reply: 'Thanks for reaching out! A team member will text you shortly.' }; }\nconst lead = $('Find Lead (Reply)').first().json;\nconst reply = $('Normalize Reply').item.json;\nconst convo = (lead.Conversation || '') + `\\nIN: ${reply.message_body}\\nOUT: ${parsed.suggested_reply}`;\nreturn [{ json: { ...parsed, customer_phone: reply.customer_phone, business_phone: reply.business_phone, message_sid: reply.message_sid, row_number: lead.row_number, lead_id: lead.Lead_ID || '', conversation: convo.trim() } }];"
+      },
+      "id": "node-parse",
+      "name": "Parse AI + Build Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 460]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_LEADS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Leads", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Customer_Phone"],
+          "value": {
+            "Customer_Phone": "={{ $json.customer_phone }}",
+            "Last_Inbound_At": "={{ $now.toISO() }}",
+            "Last_Outbound_At": "={{ $now.toISO() }}",
+            "Conversation": "={{ $json.conversation }}",
+            "AI_Intent": "={{ $json.intent }}",
+            "Service_Needed": "={{ $json.service_needed }}",
+            "Urgency": "={{ $json.urgency }}",
+            "Qualified": "={{ $json.qualified }}",
+            "Lead_Score": "={{ $json.lead_score }}",
+            "AI_Summary": "={{ $json.summary }}",
+            "Suggested_Reply": "={{ $json.suggested_reply }}",
+            "Status": "={{ $json.qualified ? 'Qualified - Owner Notified' : 'Replied - Review' }}",
+            "Owner_Notified": "Yes"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-update-lead",
+      "name": "Update Lead",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [680, 380],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.OWNER_EMAIL }}",
+        "subject": "=🔥 New Lead [{{ $('Parse AI + Build Update').item.json.urgency }}] – {{ $('Parse AI + Build Update').item.json.service_needed }}",
+        "emailType": "text",
+        "message": "=New lead from your missed-call system:\n\nPhone: {{ $('Parse AI + Build Update').item.json.customer_phone }}\nIntent: {{ $('Parse AI + Build Update').item.json.intent }}\nService: {{ $('Parse AI + Build Update').item.json.service_needed }}\nUrgency: {{ $('Parse AI + Build Update').item.json.urgency }}\nLead score: {{ $('Parse AI + Build Update').item.json.lead_score }}/100\nQualified: {{ $('Parse AI + Build Update').item.json.qualified }}\n\nSummary: {{ $('Parse AI + Build Update').item.json.summary }}\n\nConversation so far:\n{{ $('Parse AI + Build Update').item.json.conversation }}\n\nReply to the customer at: {{ $('Parse AI + Build Update').item.json.customer_phone }}",
+        "options": {}
+      },
+      "id": "node-gmail",
+      "name": "Notify Business (Gmail)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [940, 380],
+      "credentials": { "gmailOAuth2": { "id": "GMAIL_CRED", "name": "P&P Gmail" } }
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $('Parse AI + Build Update').item.json.business_phone }}",
+        "to": "={{ $('Parse AI + Build Update').item.json.customer_phone }}",
+        "message": "={{ $('Parse AI + Build Update').item.json.suggested_reply }}",
+        "options": {}
+      },
+      "id": "node-reply-sms",
+      "name": "Send AI Reply SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [940, 540],
+      "credentials": { "twilioApi": { "id": "TWILIO_CRED", "name": "P&P Twilio" } }
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response></Response>",
+        "options": { "responseHeaders": { "entries": [ { "name": "Content-Type", "value": "text/xml" } ] } }
+      },
+      "id": "node-respond",
+      "name": "Respond to Twilio",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [-340, 760]
+    }
+  ],
+  "connections": {
+    "Twilio Inbound Webhook": { "main": [[{ "node": "Respond to Twilio", "type": "main", "index": 0 }, { "node": "Route Event", "type": "main", "index": 0 }]] },
+    "Route Event": {
+      "main": [
+        [{ "node": "Normalize Reply", "type": "main", "index": 0 }],
+        [{ "node": "Normalize Missed Call", "type": "main", "index": 0 }]
+      ]
+    },
+    "Normalize Missed Call": { "main": [[{ "node": "Find Existing Lead (Call)", "type": "main", "index": 0 }]] },
+    "Find Existing Lead (Call)": { "main": [[{ "node": "Is New Lead?", "type": "main", "index": 0 }]] },
+    "Is New Lead?": { "main": [[{ "node": "Send First SMS", "type": "main", "index": 0 }], []] },
+    "Send First SMS": { "main": [[{ "node": "Log New Lead", "type": "main", "index": 0 }]] },
+    "Normalize Reply": { "main": [[{ "node": "Find Lead (Reply)", "type": "main", "index": 0 }]] },
+    "Find Lead (Reply)": { "main": [[{ "node": "Qualify Lead (AI)", "type": "main", "index": 0 }]] },
+    "Qualify Lead (AI)": { "main": [[{ "node": "Parse AI + Build Update", "type": "main", "index": 0 }]] },
+    "Parse AI + Build Update": { "main": [[{ "node": "Update Lead", "type": "main", "index": 0 }]] },
+    "Update Lead": { "main": [[{ "node": "Notify Business (Gmail)", "type": "main", "index": 0 }, { "node": "Send AI Reply SMS", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true, "callerPolicy": "workflowsFromSameOwner" },
+  "active": false
+}

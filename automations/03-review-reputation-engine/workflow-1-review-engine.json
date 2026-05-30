@@ -1,0 +1,334 @@
+{
+  "name": "P&P – Review & Reputation Engine (Core)",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "review-engine", "responseMode": "responseNode", "options": {} },
+      "id": "node-webhook",
+      "name": "Review Engine Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-980, 320],
+      "webhookId": "review-engine"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response></Response>",
+        "options": { "responseHeaders": { "entries": [ { "name": "Content-Type", "value": "text/xml" } ] } }
+      },
+      "id": "node-respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [-740, 520]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": false, "typeValidation": "loose" },
+                "conditions": [ { "leftValue": "={{ $json.body.MessageSid }}", "rightValue": "", "operator": { "type": "string", "operation": "notEmpty" } } ],
+                "combinator": "and"
+              },
+              "outputKey": "SMS Reply"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": false, "typeValidation": "loose" },
+                "conditions": [ { "leftValue": "={{ $json.body.MessageSid }}", "rightValue": "", "operator": { "type": "string", "operation": "empty" } } ],
+                "combinator": "and"
+              },
+              "outputKey": "Completed Job"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-switch",
+      "name": "Route Event",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [-740, 320]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize a completed-job / appointment-finished event (from CRM, Jobber, a Sheet, or manual webhook).\nconst b = $json.body || {};\nconst q = $json.query || {};\nconst pick = (...keys) => { for (const k of keys) { if (b[k] !== undefined && b[k] !== null && String(b[k]).trim() !== '') return String(b[k]).trim(); } return ''; };\nlet name = pick('name','full_name','customer_name','Name');\nlet phone = pick('phone','phone_number','Phone','mobile');\nconst digits = phone.replace(/[^0-9]/g,'');\nif (digits.length===10) phone='+1'+digits; else if (digits.length===11 && digits.startsWith('1')) phone='+'+digits; else if (phone && !phone.startsWith('+')) phone='+'+digits;\nconst email = pick('email','Email');\nconst job = pick('job_type','service','job','Job_Type') || 'service';\nconst source = pick('source') || q.source || 'Manual';\nconst delay = Number($env.REVIEW_DELAY_MIN || 120);\nreturn [{ json: { name, phone, email, job, source, completed_at: $now.toISO(), send_at: $now.plus({ minutes: delay }).toISO() } }];"
+      },
+      "id": "node-normalize-job",
+      "name": "Normalize Job",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-500, 180]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_REVIEWS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Reviews", "mode": "name" },
+        "filtersUI": { "values": [ { "lookupColumn": "Customer_Phone", "lookupValue": "={{ $json.phone }}" } ] },
+        "options": {}
+      },
+      "id": "node-find-job",
+      "name": "Find Existing",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-260, 180],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "typeValidation": "loose" },
+          "conditions": [ { "leftValue": "={{ $json.Customer_Phone }}", "rightValue": "", "operator": { "type": "string", "operation": "empty" } } ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-is-new",
+      "name": "Not Asked Recently?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-20, 180]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_REVIEWS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Reviews", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Customer_ID": "={{ $now.toMillis() }}-{{ $('Normalize Job').item.json.phone.slice(-4) }}",
+            "Created_At": "={{ $('Normalize Job').item.json.completed_at }}",
+            "Customer_Name": "={{ $('Normalize Job').item.json.name }}",
+            "Customer_Phone": "={{ $('Normalize Job').item.json.phone }}",
+            "Customer_Email": "={{ $('Normalize Job').item.json.email }}",
+            "Job_Type": "={{ $('Normalize Job').item.json.job }}",
+            "Completed_At": "={{ $('Normalize Job').item.json.completed_at }}",
+            "Source": "={{ $('Normalize Job').item.json.source }}",
+            "Send_At": "={{ $('Normalize Job').item.json.send_at }}",
+            "Status": "Queued - Review Pending",
+            "Review_Link_Sent": "No",
+            "Owner_Alerted": "No",
+            "Reviewed": "No"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-log-job",
+      "name": "Queue Review Request",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [220, 180],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "r1", "name": "customer_phone", "value": "={{ $json.body.From }}", "type": "string" },
+            { "id": "r2", "name": "message_body", "value": "={{ $json.body.Body }}", "type": "string" },
+            { "id": "r3", "name": "message_sid", "value": "={{ $json.body.MessageSid }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-normalize-reply",
+      "name": "Normalize Reply",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-500, 480]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_REVIEWS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Reviews", "mode": "name" },
+        "filtersUI": { "values": [ { "lookupColumn": "Customer_Phone", "lookupValue": "={{ $json.customer_phone }}" } ] },
+        "options": {}
+      },
+      "id": "node-find-reply",
+      "name": "Find Customer",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-260, 480],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "modelId": { "__rl": true, "value": "gpt-4o-mini", "mode": "list" },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "=You classify a customer's reply to a review request for {{ $env.BUSINESS_NAME }}, a {{ $env.BUSINESS_INDUSTRY }} business. The customer was asked to rate their experience 1-5. Return STRICT JSON only. Schema: {\"rating\":1-5 or null,\"sentiment\":\"positive|neutral|negative\",\"is_happy\":true|false,\"summary\":\"one sentence for the owner\",\"private_reply\":\"if unhappy: warm, apologetic 1-2 sentence SMS that we want to make it right and someone will reach out; else empty\"}. is_happy=true only for clearly satisfied customers (rating 4-5 or positive language). Treat ambiguous/neutral as is_happy=false to avoid pushing unhappy customers to public review. No text outside the JSON."
+            },
+            {
+              "role": "user",
+              "content": "=Customer reply: \"{{ $('Normalize Reply').item.json.message_body }}\""
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": { "temperature": 0.2 }
+      },
+      "id": "node-classify",
+      "name": "Classify Sentiment (AI)",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [-20, 480],
+      "credentials": { "openAiApi": { "id": "OPENAI_CRED", "name": "P&P OpenAI" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ai = $('Classify Sentiment (AI)').first().json.message?.content ?? $('Classify Sentiment (AI)').first().json;\nlet p;\ntry { p = typeof ai === 'string' ? JSON.parse(ai) : ai; }\ncatch(e){ p = { rating:null, sentiment:'neutral', is_happy:false, summary:'Could not parse AI output', private_reply:'Thank you for the feedback — someone from our team will reach out shortly.' }; }\nconst r = $('Normalize Reply').item.json;\nconst c = $('Find Customer').first().json;\nreturn [{ json: { ...p, customer_phone: r.customer_phone, message_body: r.message_body, customer_name: c.Customer_Name || '', conversation: ((c.Conversation||'')+`\\nIN: ${r.message_body}`).trim() } }];"
+      },
+      "id": "node-parse",
+      "name": "Parse Sentiment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 480]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "typeValidation": "loose" },
+          "conditions": [ { "leftValue": "={{ $json.is_happy }}", "rightValue": "true", "operator": { "type": "boolean", "operation": "true", "singleValue": true } } ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-route-sentiment",
+      "name": "Happy?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [460, 480]
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $env.TWILIO_NUMBER }}",
+        "to": "={{ $json.customer_phone }}",
+        "message": "=So glad to hear it, {{ $json.customer_name || 'and thank you' }}! 🙏 Would you mind leaving us a quick review? It really helps: {{ $env.GOOGLE_REVIEW_LINK }}",
+        "options": {}
+      },
+      "id": "node-review-sms",
+      "name": "Send Review Link",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [720, 360],
+      "credentials": { "twilioApi": { "id": "TWILIO_CRED", "name": "P&P Twilio" } }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_REVIEWS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Reviews", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Customer_Phone"],
+          "value": {
+            "Customer_Phone": "={{ $json.customer_phone }}",
+            "Last_Inbound_At": "={{ $now.toISO() }}",
+            "Rating": "={{ $json.rating }}",
+            "Sentiment": "={{ $json.sentiment }}",
+            "Is_Happy": "={{ $json.is_happy }}",
+            "AI_Summary": "={{ $json.summary }}",
+            "Conversation": "={{ $json.conversation }}",
+            "Status": "Positive - Review Requested",
+            "Review_Link_Sent": "Yes"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-update-pos",
+      "name": "Update (Positive)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [960, 360],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $env.TWILIO_NUMBER }}",
+        "to": "={{ $json.customer_phone }}",
+        "message": "={{ $json.private_reply }}",
+        "options": {}
+      },
+      "id": "node-apology-sms",
+      "name": "Send Private Apology",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [720, 600],
+      "credentials": { "twilioApi": { "id": "TWILIO_CRED", "name": "P&P Twilio" } }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.OWNER_EMAIL }}",
+        "subject": "=⚠️ Unhappy customer needs attention – {{ $('Parse Sentiment').item.json.customer_name || $('Parse Sentiment').item.json.customer_phone }}",
+        "emailType": "text",
+        "message": "=A customer responded negatively to the review request. Reach out personally ASAP before this becomes a public 1-star.\n\nName: {{ $('Parse Sentiment').item.json.customer_name }}\nPhone: {{ $('Parse Sentiment').item.json.customer_phone }}\nEstimated rating: {{ $('Parse Sentiment').item.json.rating }}\nSentiment: {{ $('Parse Sentiment').item.json.sentiment }}\nSummary: {{ $('Parse Sentiment').item.json.summary }}\n\nWhat they said: \"{{ $('Parse Sentiment').item.json.message_body }}\"",
+        "options": {}
+      },
+      "id": "node-alert-owner",
+      "name": "Alert Owner (Negative)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [960, 600],
+      "credentials": { "gmailOAuth2": { "id": "GMAIL_CRED", "name": "P&P Gmail" } }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_REVIEWS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Reviews", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Customer_Phone"],
+          "value": {
+            "Customer_Phone": "={{ $('Parse Sentiment').item.json.customer_phone }}",
+            "Last_Inbound_At": "={{ $now.toISO() }}",
+            "Rating": "={{ $('Parse Sentiment').item.json.rating }}",
+            "Sentiment": "={{ $('Parse Sentiment').item.json.sentiment }}",
+            "Is_Happy": "={{ $('Parse Sentiment').item.json.is_happy }}",
+            "AI_Summary": "={{ $('Parse Sentiment').item.json.summary }}",
+            "Conversation": "={{ $('Parse Sentiment').item.json.conversation }}",
+            "Status": "Negative - Owner Alerted",
+            "Owner_Alerted": "Yes"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-update-neg",
+      "name": "Update (Negative)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1200, 600],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    }
+  ],
+  "connections": {
+    "Review Engine Webhook": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }, { "node": "Route Event", "type": "main", "index": 0 }]] },
+    "Route Event": { "main": [ [{ "node": "Normalize Reply", "type": "main", "index": 0 }], [{ "node": "Normalize Job", "type": "main", "index": 0 }] ] },
+    "Normalize Job": { "main": [[{ "node": "Find Existing", "type": "main", "index": 0 }]] },
+    "Find Existing": { "main": [[{ "node": "Not Asked Recently?", "type": "main", "index": 0 }]] },
+    "Not Asked Recently?": { "main": [[{ "node": "Queue Review Request", "type": "main", "index": 0 }], []] },
+    "Normalize Reply": { "main": [[{ "node": "Find Customer", "type": "main", "index": 0 }]] },
+    "Find Customer": { "main": [[{ "node": "Classify Sentiment (AI)", "type": "main", "index": 0 }]] },
+    "Classify Sentiment (AI)": { "main": [[{ "node": "Parse Sentiment", "type": "main", "index": 0 }]] },
+    "Parse Sentiment": { "main": [[{ "node": "Happy?", "type": "main", "index": 0 }]] },
+    "Happy?": { "main": [ [{ "node": "Send Review Link", "type": "main", "index": 0 }], [{ "node": "Send Private Apology", "type": "main", "index": 0 }] ] },
+    "Send Review Link": { "main": [[{ "node": "Update (Positive)", "type": "main", "index": 0 }]] },
+    "Send Private Apology": { "main": [[{ "node": "Alert Owner (Negative)", "type": "main", "index": 0 }]] },
+    "Alert Owner (Negative)": { "main": [[{ "node": "Update (Negative)", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true, "callerPolicy": "workflowsFromSameOwner" },
+  "active": false
+}

@@ -11,7 +11,7 @@ Every automation in this catalog is built to be sold, installed, and supported a
 |---|---|---|---|---|---|
 | 01 | Missed Call Recovery System | $750–1,000 | $397 | 0.5–1 day | ✅ |
 | 02 | Lead Capture & Follow-Up Engine | $750–1,000 | $397 | 0.5–1 day | ✅ |
-| 03 | Review & Reputation Engine | $500–750 | $297 | 0.5 day | 🟡 |
+| 03 | Review & Reputation Engine | $500–750 | $297 | 0.5 day | ✅ |
 | 04 | Appointment Reminder & No-Show Recovery | $500–750 | $297 | 0.5–1 day | 🟡 |
 | 05 | Database Reactivation Campaign | $1,000–1,500 | $250 + rev-share | 1 day | 🟡 |
 | 06 | Estimate / Quote Follow-Up Sequence | $600–900 | $297 | 0.5–1 day | 🟡 |
@@ -44,7 +44,7 @@ Every automation in this catalog is built to be sold, installed, and supported a
 - **Estimated implementation time:** 0.5–1 day.
 - **Folder:** [`02-speed-to-lead-responder/`](02-speed-to-lead-responder/README.md)
 
-## 03 — Review & Reputation Engine 🟡
+## 03 — Review & Reputation Engine ✅
 - **Problem solved:** Few happy customers leave reviews, and bad ones surprise the owner. This requests Google reviews automatically after a job, routes unhappy customers to a private apology flow first.
 - **Ideal customer:** Reputation-driven local businesses — dentists, restaurants, salons, auto repair, contractors.
 - **Setup fee:** $500–750

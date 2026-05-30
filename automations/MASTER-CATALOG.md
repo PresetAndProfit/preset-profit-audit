@@ -16,7 +16,7 @@ Every automation in this catalog is built to be sold, installed, and supported a
 | 05 | Database Reactivation Campaign | $1,000–1,500 | $250 + rev-share | 1 day | ✅ |
 | 06 | Estimate / Quote Follow-Up Engine | $600–900 | $297 | 0.5–1 day | ✅ |
 | 07 | AI Receptionist (24/7 Voice + Chat) | $1,500–3,000 | $797–1,500 | 3–5 days | ✅ |
-| 08 | Referral Generator | $500–750 | $247 | 0.5 day | 🟡 |
+| 08 | Referral Generator Engine | $500–750 | $247 | 0.5 day | ✅ |
 | 09 | Invoice & Payment Reminder (AR) | $500–800 | $297 | 0.5–1 day | 🟡 |
 | 10 | Long-Term Nurture & Newsletter Engine | $750–1,000 | $347 | 1 day | 🟡 |
 
@@ -94,14 +94,15 @@ Every automation in this catalog is built to be sold, installed, and supported a
 - **Estimated implementation time:** 3–5 days.
 - **Folder:** [`07-ai-receptionist/`](07-ai-receptionist/README.md)
 
-## 08 — Referral Generator 🟡
-- **Problem solved:** Word-of-mouth is the best lead source but happens randomly. This asks happy customers for referrals at the right moment and tracks/rewards them.
-- **Ideal customer:** Service businesses with loyal customers — salons, dentists, contractors, real estate.
+## 08 — Referral Generator Engine ✅
+- **Problem solved:** Word-of-mouth is the best lead source but happens randomly. This qualifies happy completed-job customers, asks for a referral on a polite 3-touch SMS/email cadence (Day 0/3/7), AI-classifies replies, captures the referred lead (reply or form), and alerts the owner — never pushy, never fabricating rewards.
+- **Ideal customer:** Service businesses with loyal, satisfied customers — dentists, salons, HVAC/plumbing/roofing contractors, auto repair, real estate.
 - **Setup fee:** $500–750
 - **Monthly fee:** $247
 - **ROI:** Referred leads close at 2–4x normal rates and cost $0 in ad spend. A handful of referral jobs/mo is a **5x+** return with near-zero usage cost.
-- **Required integrations:** n8n, Twilio/Gmail, OpenAI, Google Sheets, (optional) reward/gift-card API.
+- **Required integrations:** n8n, Twilio, OpenAI, Gmail, Google Sheets, trigger source (review/survey/CRM/Jobber/ServiceTitan/Housecall Pro/GoHighLevel), (optional) reward/gift-card API.
 - **Estimated implementation time:** 0.5 day.
+- **Bundle opportunities:** the natural capstone to the **"Never Lose a Lead" suite (#01 + #02 + #03)** — capture, respond, earn the review, then ask the delighted customer for a referral; pairs with **#05 Database Reactivation** (reactivate → delight → refer) as a "growth flywheel."
 - **Folder:** [`08-referral-generator/`](08-referral-generator/README.md)
 
 ## 09 — Invoice & Payment Reminder (AR) 🟡

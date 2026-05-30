@@ -1,0 +1,159 @@
+{
+  "name": "P&P – Referral Generator (Request Sequence)",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [ { "field": "minutes", "minutesInterval": 15 } ] } },
+      "id": "node-cron",
+      "name": "Every 15 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-1000, 320]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_REFERRALS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Customers", "mode": "name" },
+        "options": {}
+      },
+      "id": "node-read",
+      "name": "Read Customers",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-760, 320],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Referral request sequence: initial / +3d reminder / +7d final (configurable), SMS+Email.\n// Stops on reply, opt-out, referral submitted, or staff-ineligible. Compliance gated in code.\n// Plain Date math (version-safe, no $DateTime).\nconst openH = Number($env.BUSINESS_HOURS_START || 9);\nconst closeH = Number($env.BUSINESS_HOURS_END || 19);\nif (!($now.hour >= openH && $now.hour < closeH)) return []; // quiet/business-hours gate\nconst days = (($env.REQUEST_DAYS || '0,3,7').split(',')).map(n => Number(n.trim())).filter(n => !isNaN(n));\nconst channels = (($env.REQUEST_CHANNELS || 'sms,email,sms').split(',')).map(s => s.trim().toLowerCase());\nconst maxSteps = days.length;\nconst dailyCap = Number($env.DAILY_CAP || 200);\nconst biz = $env.BUSINESS_NAME || 'us';\nconst link = $env.REFERRAL_LINK || $env.BOOKING_LINK || '';\nconst incentive = ($env.REFERRAL_INCENTIVE || '').trim();\nconst nowMs = $now.toMillis();\nconst today = $now.toISODate();\nconst yes = v => String(v || '').toLowerCase() === 'yes';\nconst dateOf = v => { const t = new Date(v).getTime(); return isNaN(t) ? '' : new Date(t).toISOString().slice(0,10); };\nconst rows = $input.all().map(i => i.json);\nconst sentToday = rows.filter(r => r.Last_Outbound_At && dateOf(r.Last_Outbound_At) === today).length;\nlet remaining = Math.max(0, dailyCap - sentToday);\nconst terminal = s => ['opted out','not eligible','referral submitted','complaint','complete'].some(t => s.includes(t));\nconst out = [];\nfor (const r of rows) {\n  if (remaining <= 0) break;\n  if (yes(r.Opted_Out)) continue;\n  if (yes(r.Referral_Submitted)) continue;\n  if (String(r.Referral_Eligible || '').toLowerCase() !== 'yes') continue;\n  if (String(r.Sequence_Active || 'No').toLowerCase() !== 'yes') continue;\n  if (r.Last_Inbound_At) continue; // customer replied -> stop\n  if (terminal(String(r.Status || '').toLowerCase())) continue;\n  const step = Number(r.Sequence_Step || 0);\n  if (step >= maxSteps) continue;\n  const phone = String(r.Customer_Phone || '').trim();\n  const due = r.Next_Request_At ? nowMs >= new Date(r.Next_Request_At).getTime() : false;\n  if (!due) continue;\n  const nextStep = step + 1;\n  const isLast = nextStep >= maxSteps;\n  const channel = channels[step] || 'sms';\n  const first = r.Customer_Name ? (' ' + String(r.Customer_Name).split(' ')[0]) : '';\n  const svc = r.Service_Type ? ` with your ${r.Service_Type}` : '';\n  const rewardLine = incentive ? ` As a thank-you, ${incentive}.` : '';\n  let sms;\n  if (step === 0) sms = `Hi${first}, it's ${biz} — so glad we could help${svc}! If you know someone who'd need us, we'd be grateful for an intro.${rewardLine} Share here: ${link}`.trim();\n  else if (isLast) sms = `Hi${first}, last note from ${biz} — no pressure at all. If anyone comes to mind who could use us, here's an easy link: ${link}. Thanks either way!`.trim();\n  else sms = `Hi${first}, just a friendly follow-up from ${biz}. Know anyone who'd love the same service? A quick intro means a lot: ${link}`.trim();\n  sms = `${sms} Reply STOP to opt out.`;\n  const emailSubject = step === 0 ? `A quick favor from ${biz}` : `Following up — ${biz}`;\n  const emailBody = `Hi${first},\\n\\nThank you again for letting ${biz} help you${svc}. If you know someone who'd benefit from the same service, we'd be truly grateful for a referral.${rewardLine}\\n\\nIt only takes a moment: ${link}\\n\\nNo pressure at all — thank you either way!\\n\\n— ${biz}\\n\\nReply STOP to opt out.`;\n  const gaps = days;\n  const nextAt = isLast ? '' : $now.plus({ minutes: ((gaps[nextStep] !== undefined ? gaps[nextStep] : 0) - (gaps[step] || 0)) * 1440 }).toISO();\n  out.push({ json: { ...r, _channel: (channel === 'email' && r.Customer_Email) ? 'email' : 'sms', _sms_msg: sms, _email_subject: emailSubject, _email_body: emailBody, _next_step: nextStep, _is_last: isLast, _next_request_at: nextAt, _new_status: isLast ? 'Sequence Complete - No Referral' : 'Request Sent' } });\n  remaining--;\n}\nreturn out;"
+      },
+      "id": "node-filter",
+      "name": "Find Due Requests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-520, 320]
+    },
+    {
+      "parameters": { "batchSize": 1, "options": {} },
+      "id": "node-loop",
+      "name": "Loop Customers",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [-280, 320]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            { "conditions": { "options": { "caseSensitive": false, "typeValidation": "loose" }, "conditions": [ { "leftValue": "={{ $json._channel }}", "rightValue": "email", "operator": { "type": "string", "operation": "equals" } } ], "combinator": "and" }, "outputKey": "Email" },
+            { "conditions": { "options": { "caseSensitive": false, "typeValidation": "loose" }, "conditions": [ { "leftValue": "={{ $json._channel }}", "rightValue": "sms", "operator": { "type": "string", "operation": "equals" } } ], "combinator": "and" }, "outputKey": "SMS" }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "node-route",
+      "name": "Route Channel",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [-40, 320]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.Customer_Email }}",
+        "subject": "={{ $json._email_subject }}",
+        "emailType": "text",
+        "message": "={{ $json._email_body }}",
+        "options": {}
+      },
+      "id": "node-email",
+      "name": "Send Request Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [220, 200],
+      "credentials": { "gmailOAuth2": { "id": "GMAIL_CRED", "name": "P&P Gmail" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $env.TWILIO_NUMBER }}",
+        "to": "={{ $json.Customer_Phone }}",
+        "message": "={{ $json._sms_msg }}",
+        "options": {}
+      },
+      "id": "node-sms",
+      "name": "Send Request SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [220, 420],
+      "credentials": { "twilioApi": { "id": "TWILIO_CRED", "name": "P&P Twilio" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_REFERRALS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Referral_Requests", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Customer_ID": "={{ $json.Customer_ID }}",
+            "Sent_At": "={{ $now.toISO() }}",
+            "Step": "={{ $json._next_step }}",
+            "Channel": "={{ $json._channel }}",
+            "Message": "={{ $json._channel === 'email' ? $json._email_subject : $json._sms_msg }}",
+            "Customer_Phone": "={{ $json.Customer_Phone }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-logreq",
+      "name": "Log Request",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [480, 320],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_REFERRALS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Customers", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Customer_ID"],
+          "value": {
+            "Customer_ID": "={{ $json.Customer_ID }}",
+            "Sequence_Step": "={{ $json._next_step }}",
+            "Last_Outbound_At": "={{ $now.toISO() }}",
+            "Last_Request_At": "={{ $now.toISO() }}",
+            "Next_Request_At": "={{ $json._next_request_at }}",
+            "Sequence_Active": "={{ $json._is_last ? 'No' : 'Yes' }}",
+            "Status": "={{ $json._new_status }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-update",
+      "name": "Update Sequence State",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [720, 320],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    }
+  ],
+  "connections": {
+    "Every 15 min": { "main": [[{ "node": "Read Customers", "type": "main", "index": 0 }]] },
+    "Read Customers": { "main": [[{ "node": "Find Due Requests", "type": "main", "index": 0 }]] },
+    "Find Due Requests": { "main": [[{ "node": "Loop Customers", "type": "main", "index": 0 }]] },
+    "Loop Customers": { "main": [[{ "node": "Route Channel", "type": "main", "index": 0 }]] },
+    "Route Channel": { "main": [[{ "node": "Send Request Email", "type": "main", "index": 0 }], [{ "node": "Send Request SMS", "type": "main", "index": 0 }], []] },
+    "Send Request Email": { "main": [[{ "node": "Log Request", "type": "main", "index": 0 }]] },
+    "Send Request SMS": { "main": [[{ "node": "Log Request", "type": "main", "index": 0 }]] },
+    "Log Request": { "main": [[{ "node": "Update Sequence State", "type": "main", "index": 0 }]] },
+    "Update Sequence State": { "main": [[{ "node": "Loop Customers", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
+  "active": false
+}

@@ -1,0 +1,237 @@
+{
+  "name": "P&P – Referral Generator (Capture & Owner Alert)",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "referral-capture", "responseMode": "responseNode", "options": {} },
+      "id": "node-webhook",
+      "name": "Referral Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-1120, 360],
+      "webhookId": "referral-capture"
+    },
+    {
+      "parameters": { "respondWith": "json", "responseBody": "={{ { \"status\": \"received\" } }}", "options": {} },
+      "id": "node-respond",
+      "name": "Respond to Source",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [-880, 540]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize a submitted referral from a form / landing page / CRM webhook.\nconst b = $json.body || {};\nconst q = $json.query || {};\nconst nests = [b, b.data, b.referral, b.fields, q].filter(Boolean);\nconst pick = (...keys) => { for (const src of nests) { for (const k of keys) { const v = src && src[k]; if (v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim(); } } return ''; };\nconst e164 = raw => { let p = String(raw || '').trim(); const d = p.replace(/[^0-9]/g, ''); if (d.length === 10) return '+1' + d; if (d.length === 11 && d.startsWith('1')) return '+' + d; return p && !p.startsWith('+') ? (d ? '+' + d : '') : p; };\nconst referrer_name = pick('referrer_name','referrerName','from_name','your_name','referrer');\nconst referrer_phone = e164(pick('referrer_phone','referrerPhone','your_phone','from_phone'));\nconst referred_name = pick('referred_name','referredName','friend_name','name','referred_person','their_name');\nconst referred_phone = e164(pick('referred_phone','referredPhone','friend_phone','phone','their_phone'));\nconst referred_email = pick('referred_email','referredEmail','friend_email','email','their_email');\nconst service = pick('service_needed','service','service_type','need','reason','interest');\nconst relationship = pick('relationship','relation','how_know');\nconst notes = pick('notes','message','comments','details','description');\nconst wants_contact = /yes|true|asap|now|call/i.test(pick('wants_contact','contact_me','call_me') || '');\nconst source = pick('source') || q.source || 'Referral Form';\nconst referral_id = `${$now.toMillis()}-${referred_phone.replace(/[^0-9]/g,'').slice(-4)}`;\nreturn [{ json: { referral_id, referrer_name, referrer_phone, referred_name, referred_phone, referred_email, service, relationship, notes, wants_contact, source, received_at: $now.toISO() } }];"
+      },
+      "id": "node-normalize",
+      "name": "Normalize Referral",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-880, 360]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_REFERRALS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Referrals", "mode": "name" },
+        "filtersUI": { "values": [ { "lookupColumn": "Referred_Phone", "lookupValue": "={{ $json.referred_phone }}" } ] },
+        "options": {}
+      },
+      "id": "node-find",
+      "name": "Find Existing Referral",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-640, 360],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "typeValidation": "loose" },
+          "conditions": [ { "leftValue": "={{ $json.Referred_Phone }}", "rightValue": "", "operator": { "type": "string", "operation": "empty" } } ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-is-new",
+      "name": "Is New Referral?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-400, 360]
+    },
+    {
+      "parameters": {
+        "modelId": { "__rl": true, "value": "gpt-4o-mini", "mode": "list" },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "=You process a referral submitted to {{ $env.BUSINESS_NAME }}, a {{ $env.BUSINESS_INDUSTRY }} business. Return STRICT JSON only. Schema: {\"summary\":\"one sentence for the owner\",\"high_value\":true|false,\"urgent\":true|false,\"wants_contact\":true|false,\"suggested_owner_message\":\"a brief, warm 1-2 sentence outreach the owner could send the referred person; never fabricate incentives or promise rewards unless one is provided here: {{ $env.REFERRAL_INCENTIVE }}; never pressure\"}. high_value=true if the service sounds like a large/expensive job. urgent=true if they need help soon. No text outside the JSON object."
+            },
+            { "role": "user", "content": "=Referred person: {{ $('Normalize Referral').item.json.referred_name }}\nService needed: {{ $('Normalize Referral').item.json.service }}\nRelationship: {{ $('Normalize Referral').item.json.relationship }}\nNotes: {{ $('Normalize Referral').item.json.notes }}" }
+          ]
+        },
+        "jsonOutput": true,
+        "options": { "temperature": 0.3 }
+      },
+      "id": "node-ai",
+      "name": "Summarize Referral (AI)",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [-160, 240],
+      "credentials": { "openAiApi": { "id": "OPENAI_CRED", "name": "P&P OpenAI" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ai = $('Summarize Referral (AI)').first().json.message?.content ?? $('Summarize Referral (AI)').first().json;\nlet p;\ntry { p = typeof ai === 'string' ? JSON.parse(ai) : ai; }\ncatch (e) { p = { summary:'New referral submitted', high_value:false, urgent:false, wants_contact:false, suggested_owner_message:'' }; }\nconst n = $('Normalize Referral').item.json;\nconst high_value = !!p.high_value;\nconst urgent = !!p.urgent;\nconst wants_contact = !!p.wants_contact || !!n.wants_contact;\nconst escalate = high_value || urgent || wants_contact;\nreturn [{ json: { ...n, summary: p.summary || 'New referral submitted', suggested_owner_message: p.suggested_owner_message || '', high_value, urgent, wants_contact, escalate } }];"
+      },
+      "id": "node-parse",
+      "name": "Parse Referral",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [80, 240]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_REFERRALS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Referrals", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Referral_ID": "={{ $('Parse Referral').item.json.referral_id }}",
+            "Created_At": "={{ $('Parse Referral').item.json.received_at }}",
+            "Referrer_Name": "={{ $('Parse Referral').item.json.referrer_name }}",
+            "Referrer_Phone": "={{ $('Parse Referral').item.json.referrer_phone }}",
+            "Referred_Name": "={{ $('Parse Referral').item.json.referred_name }}",
+            "Referred_Phone": "={{ $('Parse Referral').item.json.referred_phone }}",
+            "Referred_Email": "={{ $('Parse Referral').item.json.referred_email }}",
+            "Service_Needed": "={{ $('Parse Referral').item.json.service }}",
+            "Relationship": "={{ $('Parse Referral').item.json.relationship }}",
+            "Notes": "={{ $('Parse Referral').item.json.notes }}",
+            "AI_Summary": "={{ $('Parse Referral').item.json.summary }}",
+            "Source": "={{ $('Parse Referral').item.json.source }}",
+            "Status": "New",
+            "Owner_Notified": "Yes"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-log",
+      "name": "Log Referral",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [320, 240],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_REFERRALS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Customers", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Customer_Phone"],
+          "value": {
+            "Customer_Phone": "={{ $('Parse Referral').item.json.referrer_phone }}",
+            "Referral_Submitted": "Yes",
+            "Sequence_Active": "No",
+            "Status": "Referral Submitted"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-update-referrer",
+      "name": "Update Referrer",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [560, 240],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.OWNER_EMAIL }}",
+        "subject": "=🎉 New referral{{ $('Parse Referral').item.json.high_value ? ' (HIGH VALUE)' : '' }}{{ $('Parse Referral').item.json.urgent ? ' (URGENT)' : '' }} – {{ $('Parse Referral').item.json.referred_name || $('Parse Referral').item.json.referred_phone }}",
+        "emailType": "text",
+        "message": "=A customer just referred someone to you:\n\nReferred by: {{ $('Parse Referral').item.json.referrer_name }} ({{ $('Parse Referral').item.json.referrer_phone }})\n\nReferred person: {{ $('Parse Referral').item.json.referred_name }}\nPhone: {{ $('Parse Referral').item.json.referred_phone }}\nEmail: {{ $('Parse Referral').item.json.referred_email }}\nService needed: {{ $('Parse Referral').item.json.service }}\nRelationship: {{ $('Parse Referral').item.json.relationship }}\nNotes: {{ $('Parse Referral').item.json.notes }}\n\nSummary: {{ $('Parse Referral').item.json.summary }}\nHigh value: {{ $('Parse Referral').item.json.high_value }} | Urgent: {{ $('Parse Referral').item.json.urgent }} | Wants contact: {{ $('Parse Referral').item.json.wants_contact }}\n\nSuggested outreach: {{ $('Parse Referral').item.json.suggested_owner_message }}\n\nReach out promptly — referred leads close fast. (And thank {{ $('Parse Referral').item.json.referrer_name }}!)",
+        "options": {}
+      },
+      "id": "node-alert-email",
+      "name": "Alert Owner Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [800, 240],
+      "credentials": { "gmailOAuth2": { "id": "GMAIL_CRED", "name": "P&P Gmail" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "typeValidation": "loose" },
+          "conditions": [ { "leftValue": "={{ $('Parse Referral').item.json.escalate }}", "rightValue": "true", "operator": { "type": "boolean", "operation": "true", "singleValue": true } } ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-if-escalate",
+      "name": "Escalate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1040, 240]
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $env.TWILIO_NUMBER }}",
+        "to": "={{ $env.OWNER_PHONE }}",
+        "message": "=New referral{{ $('Parse Referral').item.json.high_value ? ' (HIGH VALUE)' : '' }}{{ $('Parse Referral').item.json.urgent ? ' (URGENT)' : '' }}: {{ $('Parse Referral').item.json.referred_name || $('Parse Referral').item.json.referred_phone }} needs {{ $('Parse Referral').item.json.service }}. From {{ $('Parse Referral').item.json.referrer_name }}. Call them soon.",
+        "options": {}
+      },
+      "id": "node-alert-sms",
+      "name": "Alert Owner SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [1280, 160],
+      "credentials": { "twilioApi": { "id": "TWILIO_CRED", "name": "P&P Twilio" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_REFERRALS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Referrals", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Referred_Phone"],
+          "value": {
+            "Referred_Phone": "={{ $('Normalize Referral').item.json.referred_phone }}",
+            "Notes": "={{ 'Duplicate submission ' + $now.toISO() + '. ' + $('Normalize Referral').item.json.notes }}",
+            "Status": "Duplicate"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-update-existing",
+      "name": "Update Existing Referral",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-160, 500],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    }
+  ],
+  "connections": {
+    "Referral Webhook": { "main": [[{ "node": "Respond to Source", "type": "main", "index": 0 }, { "node": "Normalize Referral", "type": "main", "index": 0 }]] },
+    "Normalize Referral": { "main": [[{ "node": "Find Existing Referral", "type": "main", "index": 0 }]] },
+    "Find Existing Referral": { "main": [[{ "node": "Is New Referral?", "type": "main", "index": 0 }]] },
+    "Is New Referral?": { "main": [[{ "node": "Summarize Referral (AI)", "type": "main", "index": 0 }], [{ "node": "Update Existing Referral", "type": "main", "index": 0 }]] },
+    "Summarize Referral (AI)": { "main": [[{ "node": "Parse Referral", "type": "main", "index": 0 }]] },
+    "Parse Referral": { "main": [[{ "node": "Log Referral", "type": "main", "index": 0 }]] },
+    "Log Referral": { "main": [[{ "node": "Update Referrer", "type": "main", "index": 0 }]] },
+    "Update Referrer": { "main": [[{ "node": "Alert Owner Email", "type": "main", "index": 0 }]] },
+    "Alert Owner Email": { "main": [[{ "node": "Escalate?", "type": "main", "index": 0 }]] },
+    "Escalate?": { "main": [[{ "node": "Alert Owner SMS", "type": "main", "index": 0 }], []] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true, "callerPolicy": "workflowsFromSameOwner" },
+  "active": false
+}

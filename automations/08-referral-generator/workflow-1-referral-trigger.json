@@ -1,0 +1,467 @@
+{
+  "name": "P&P – Referral Generator (Trigger & Qualification)",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "referral-trigger", "responseMode": "responseNode", "options": {} },
+      "id": "node-webhook",
+      "name": "Trigger Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-1120, 380],
+      "webhookId": "referral-trigger"
+    },
+    {
+      "parameters": { "respondWith": "json", "responseBody": "={{ { \"status\": \"received\" } }}", "options": {} },
+      "id": "node-respond",
+      "name": "Respond to Source",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [-880, 580]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": false, "typeValidation": "loose" },
+                "conditions": [ { "leftValue": "={{ $json.body.MessageSid }}", "rightValue": "", "operator": { "type": "string", "operation": "notEmpty" } } ],
+                "combinator": "and"
+              },
+              "outputKey": "SMS Reply"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "node-switch",
+      "name": "Route Event",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [-880, 380]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize a completed-job / happy-customer event from any source:\n// completed job, positive review, survey, manual Sheet, CRM, Jobber, ServiceTitan, Housecall Pro, GoHighLevel.\nconst b = $json.body || {};\nconst q = $json.query || {};\nconst nests = [b, b.data, b.client, b.customer, b.contact, b.job, b.opportunity, q].filter(Boolean);\nconst pick = (...keys) => { for (const src of nests) { for (const k of keys) { const v = src && src[k]; if (v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim(); } } return ''; };\nlet name = pick('customer_name','customerName','client_name','name','full_name','fullName');\nconst first = pick('first_name','firstName'); const last = pick('last_name','lastName');\nif (!name && (first || last)) name = `${first} ${last}`.trim();\nlet phone = pick('phone','phone_number','phoneNumber','mobile','cell');\nconst digits = phone.replace(/[^0-9]/g, '');\nif (digits.length === 10) phone = '+1' + digits; else if (digits.length === 11 && digits.startsWith('1')) phone = '+' + digits; else if (phone && !phone.startsWith('+')) phone = digits ? '+' + digits : '';\nconst email = pick('email','email_address','customer_email');\nconst service = pick('service','service_type','job_type','category','title','description');\nconst completion = pick('completion_date','completed_at','completedAt','job_completed','date_completed','closed_at') || ($now.toISODate());\nconst sat = pick('satisfaction_score','satisfaction','rating','score','nps','stars');\nconst review = pick('review_status','review','sentiment','feedback');\nconst staff = pick('assigned_staff','staff','technician','rep','assigned_to','owner');\nconst status = pick('status','stage','event');\nconst source = pick('source','provider','integration') || q.source || 'Webhook';\nconst extId = pick('customer_id','customerId','id','job_id','jobId','contact_id');\nconst customerId = extId ? `${source}-${extId}` : (digits ? `${digits.slice(-10)}` : `${$now.toMillis()}`);\nreturn [{ json: { customer_id: customerId, name, phone, email, service, completion_date: completion, satisfaction_score: sat, review_status: review, assigned_staff: staff, status, source, received_at: $now.toISO() } }];"
+      },
+      "id": "node-normalize",
+      "name": "Normalize Customer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-620, 200]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_REFERRALS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Customers", "mode": "name" },
+        "filtersUI": { "values": [ { "lookupColumn": "Customer_ID", "lookupValue": "={{ $json.customer_id }}" } ] },
+        "options": {}
+      },
+      "id": "node-find",
+      "name": "Find Existing Customer",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-380, 200],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Eligibility gate (in code, not the prompt): satisfied + complete + no complaint + not opted out + cooldown passed + not staff-blocked.\nconst n = $('Normalize Customer').item.json;\nconst ex = $json || {};\nconst minSat = Number($env.MIN_SATISFACTION || 4);\nconst cooldownDays = Number($env.REFERRAL_COOLDOWN_DAYS || 90);\nconst sat = Number(n.satisfaction_score || 0);\nconst reviewPos = ['positive','happy','satisfied','5','4'].some(s => String(n.review_status || '').toLowerCase().includes(s));\nconst satisfied = sat >= minSat || reviewPos;\nconst complete = !!n.completion_date || String(n.status || '').toLowerCase().includes('complete');\nconst complaint = String(ex.Complaint || '').toLowerCase() === 'yes';\nconst optedOut = String(ex.Opted_Out || '').toLowerCase() === 'yes';\nconst lastReq = ex.Last_Request_At ? new Date(ex.Last_Request_At).getTime() : 0;\nconst cooldownOk = !lastReq || ($now.toMillis() - lastReq) >= cooldownDays * 86400000;\nconst staffBlock = String(ex.Referral_Eligible || '').toLowerCase() === 'no' && String(ex.Status || '').toLowerCase().includes('not eligible');\nconst reasons = [];\nif (!satisfied) reasons.push('not satisfied');\nif (!complete) reasons.push('job not complete');\nif (complaint) reasons.push('unresolved complaint');\nif (optedOut) reasons.push('opted out');\nif (!cooldownOk) reasons.push('within referral cooldown');\nif (staffBlock) reasons.push('staff marked not eligible');\nconst eligible = reasons.length === 0;\nconst delayMin = Number($env.REQUEST_DELAY_MIN || 60);\nreturn [{ json: { ...n, is_new: !ex.Customer_ID, prev_complaint: complaint ? 'Yes' : 'No', prev_optout: optedOut ? 'Yes' : 'No', eligible, reason: reasons.join('; ') || 'eligible', next_request_at: $now.plus({ minutes: delayMin }).toISO() } }];"
+      },
+      "id": "node-qualify",
+      "name": "Qualify Customer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-140, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "typeValidation": "loose" },
+          "conditions": [ { "leftValue": "={{ $json.eligible }}", "rightValue": "true", "operator": { "type": "boolean", "operation": "true", "singleValue": true } } ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-is-eligible",
+      "name": "Eligible?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [100, 200]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_REFERRALS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Customers", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Customer_ID"],
+          "value": {
+            "Customer_ID": "={{ $('Qualify Customer').item.json.customer_id }}",
+            "Created_At": "={{ $('Qualify Customer').item.json.received_at }}",
+            "Customer_Name": "={{ $('Qualify Customer').item.json.name }}",
+            "Customer_Phone": "={{ $('Qualify Customer').item.json.phone }}",
+            "Customer_Email": "={{ $('Qualify Customer').item.json.email }}",
+            "Service_Type": "={{ $('Qualify Customer').item.json.service }}",
+            "Completion_Date": "={{ $('Qualify Customer').item.json.completion_date }}",
+            "Satisfaction_Score": "={{ $('Qualify Customer').item.json.satisfaction_score }}",
+            "Review_Status": "={{ $('Qualify Customer').item.json.review_status }}",
+            "Assigned_Staff": "={{ $('Qualify Customer').item.json.assigned_staff }}",
+            "Source": "={{ $('Qualify Customer').item.json.source }}",
+            "Referral_Eligible": "Yes",
+            "Status": "Eligible - Queued",
+            "Sequence_Step": "0",
+            "Sequence_Active": "Yes",
+            "Next_Request_At": "={{ $('Qualify Customer').item.json.next_request_at }}",
+            "Complaint": "={{ $('Qualify Customer').item.json.prev_complaint }}",
+            "Opted_Out": "={{ $('Qualify Customer').item.json.prev_optout }}",
+            "Referral_Submitted": "No",
+            "Owner_Notified": "No"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-log-eligible",
+      "name": "Log Eligible Customer",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [340, 80],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_REFERRALS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Status_History", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Customer_ID": "={{ $('Qualify Customer').item.json.customer_id }}",
+            "Changed_At": "={{ $now.toISO() }}",
+            "Old_Status": "",
+            "New_Status": "Eligible - Queued",
+            "Changed_By": "={{ $('Qualify Customer').item.json.source }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-status-new",
+      "name": "Record Status (Eligible)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [580, 80],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_REFERRALS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Customers", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Customer_ID"],
+          "value": {
+            "Customer_ID": "={{ $('Qualify Customer').item.json.customer_id }}",
+            "Created_At": "={{ $('Qualify Customer').item.json.received_at }}",
+            "Customer_Name": "={{ $('Qualify Customer').item.json.name }}",
+            "Customer_Phone": "={{ $('Qualify Customer').item.json.phone }}",
+            "Customer_Email": "={{ $('Qualify Customer').item.json.email }}",
+            "Service_Type": "={{ $('Qualify Customer').item.json.service }}",
+            "Source": "={{ $('Qualify Customer').item.json.source }}",
+            "Referral_Eligible": "No",
+            "Sequence_Active": "No",
+            "Status": "Not Eligible",
+            "AI_Summary": "={{ 'Ineligible: ' + $('Qualify Customer').item.json.reason }}",
+            "Complaint": "={{ $('Qualify Customer').item.json.prev_complaint }}",
+            "Opted_Out": "={{ $('Qualify Customer').item.json.prev_optout }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-log-ineligible",
+      "name": "Log Ineligible Customer",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [340, 320],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "r1", "name": "customer_phone", "value": "={{ $json.body.From }}", "type": "string" },
+            { "id": "r2", "name": "message_body", "value": "={{ $json.body.Body }}", "type": "string" },
+            { "id": "r3", "name": "message_sid", "value": "={{ $json.body.MessageSid }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-normalize-reply",
+      "name": "Normalize Reply",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-620, 560]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false, "typeValidation": "loose" },
+          "conditions": [ { "leftValue": "={{ $json.message_body }}", "rightValue": "^\\s*(stop|stopall|unsubscribe|cancel|end|quit|optout|opt out)\\s*$", "operator": { "type": "string", "operation": "regex" } } ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-is-stop",
+      "name": "Is Opt-Out?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-380, 560]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_REFERRALS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Customers", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Customer_Phone"],
+          "value": {
+            "Customer_Phone": "={{ $json.customer_phone }}",
+            "Opted_Out": "Yes",
+            "Sequence_Active": "No",
+            "Last_Inbound_At": "={{ $now.toISO() }}",
+            "Status": "Opted Out"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-suppress",
+      "name": "Suppress (Opt-Out)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-140, 440],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_REFERRALS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Opt_Outs", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Customer_Phone": "={{ $json.customer_phone }}",
+            "Opted_Out_At": "={{ $now.toISO() }}",
+            "Source": "SMS STOP"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-logoptout",
+      "name": "Log Opt-Out",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [100, 440],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_REFERRALS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Customers", "mode": "name" },
+        "filtersUI": { "values": [ { "lookupColumn": "Customer_Phone", "lookupValue": "={{ $json.customer_phone }}" } ] },
+        "options": {}
+      },
+      "id": "node-find-reply",
+      "name": "Find Customer (Reply)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-140, 680],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "modelId": { "__rl": true, "value": "gpt-4o-mini", "mode": "list" },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "=You analyze a customer's SMS reply to a referral request from {{ $env.BUSINESS_NAME }}, a {{ $env.BUSINESS_INDUSTRY }} business. Return STRICT JSON only. Schema: {\"class\":\"REFERRAL_PROVIDED|INTERESTED_BUT_NEEDS_PROMPTING|NOT_NOW|COMPLAINT|STOP|GENERAL_REPLY\",\"sentiment\":\"positive|neutral|negative\",\"complaint\":true|false,\"referral\":{\"name\":\"\",\"phone\":\"\",\"email\":\"\",\"service\":\"\",\"relationship\":\"\",\"notes\":\"\"},\"summary\":\"one sentence for the owner\",\"suggested_reply\":\"warm, brief 1-2 sentence SMS under 300 chars. Never pressure. Never promise rewards or incentives unless one is provided here: {{ $env.REFERRAL_INCENTIVE }}. If a referral was given, thank them warmly. If a complaint, apologize sincerely and say the owner will personally follow up. If interested but vague, gently make it easy to share a name.\"}. Leave referral fields empty strings if none was given. No text outside the JSON object."
+            },
+            { "role": "user", "content": "=Customer reply: \"{{ $('Normalize Reply').item.json.message_body }}\"" }
+          ]
+        },
+        "jsonOutput": true,
+        "options": { "temperature": 0.3 }
+      },
+      "id": "node-classify",
+      "name": "Classify Reply (AI)",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [120, 680],
+      "credentials": { "openAiApi": { "id": "OPENAI_CRED", "name": "P&P OpenAI" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ai = $('Classify Reply (AI)').first().json.message?.content ?? $('Classify Reply (AI)').first().json;\nlet p;\ntry { p = typeof ai === 'string' ? JSON.parse(ai) : ai; }\ncatch (e) { p = { class:'GENERAL_REPLY', sentiment:'neutral', complaint:false, referral:{}, summary:'Could not parse AI output', suggested_reply:'Thanks so much for replying! We really appreciate you.' }; }\nconst r = $('Normalize Reply').item.json;\nconst c = $('Find Customer (Reply)').first().json || {};\nconst ref = p.referral || {};\nconst convo = ((c.Conversation || '') + `\\nIN: ${r.message_body}\\nOUT: ${p.suggested_reply}`).trim();\nconst cls = String(p.class || 'GENERAL_REPLY').toUpperCase();\nconst statusMap = { REFERRAL_PROVIDED:'Replied - Referral Provided', INTERESTED_BUT_NEEDS_PROMPTING:'Replied - Interested', NOT_NOW:'Replied - Not Now', COMPLAINT:'Replied - Complaint', STOP:'Opted Out', GENERAL_REPLY:'Replied - General' };\nconst referral_provided = cls === 'REFERRAL_PROVIDED' && !!(ref.name || ref.phone);\nconst complaint = cls === 'COMPLAINT' || p.complaint === true;\nconst wants_contact = /call me|contact me|reach me|phone me|call back/i.test(r.message_body || '');\nconst alert_owner = complaint || referral_provided || wants_contact;\nreturn [{ json: { class: cls, sentiment: p.sentiment || 'neutral', complaint, referral: ref, referral_provided, wants_contact, summary: p.summary || '', suggested_reply: p.suggested_reply || 'Thank you!', customer_phone: r.customer_phone, message_body: r.message_body, customer_name: c.Customer_Name || '', conversation: convo, new_status: statusMap[cls] || 'Replied - General', alert_owner } }];"
+      },
+      "id": "node-parse-reply",
+      "name": "Parse Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [360, 680]
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $env.TWILIO_NUMBER }}",
+        "to": "={{ $json.customer_phone }}",
+        "message": "={{ $json.suggested_reply }}",
+        "options": {}
+      },
+      "id": "node-reply-sms",
+      "name": "Send AI Reply",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [600, 680],
+      "credentials": { "twilioApi": { "id": "TWILIO_CRED", "name": "P&P Twilio" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_REFERRALS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Customers", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Customer_Phone"],
+          "value": {
+            "Customer_Phone": "={{ $json.customer_phone }}",
+            "Last_Inbound_At": "={{ $now.toISO() }}",
+            "Last_Outbound_At": "={{ $now.toISO() }}",
+            "Conversation": "={{ $json.conversation }}",
+            "AI_Class": "={{ $json.class }}",
+            "AI_Sentiment": "={{ $json.sentiment }}",
+            "AI_Summary": "={{ $json.summary }}",
+            "Complaint": "={{ $json.complaint ? 'Yes' : 'No' }}",
+            "Referral_Submitted": "={{ $json.referral_provided ? 'Yes' : 'No' }}",
+            "Sequence_Active": "No",
+            "Status": "={{ $json.new_status }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-update-reply",
+      "name": "Update Customer (Reply)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [600, 860],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "typeValidation": "loose" },
+          "conditions": [ { "leftValue": "={{ $('Parse Reply').item.json.referral_provided }}", "rightValue": "true", "operator": { "type": "boolean", "operation": "true", "singleValue": true } } ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-if-referral",
+      "name": "Referral In Reply?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [840, 860]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_REFERRALS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Referrals", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Referral_ID": "={{ $now.toMillis() }}",
+            "Created_At": "={{ $now.toISO() }}",
+            "Referrer_Name": "={{ $('Parse Reply').item.json.customer_name }}",
+            "Referrer_Phone": "={{ $('Parse Reply').item.json.customer_phone }}",
+            "Referred_Name": "={{ $('Parse Reply').item.json.referral.name }}",
+            "Referred_Phone": "={{ $('Parse Reply').item.json.referral.phone }}",
+            "Referred_Email": "={{ $('Parse Reply').item.json.referral.email }}",
+            "Service_Needed": "={{ $('Parse Reply').item.json.referral.service }}",
+            "Relationship": "={{ $('Parse Reply').item.json.referral.relationship }}",
+            "Notes": "={{ $('Parse Reply').item.json.referral.notes }}",
+            "Source": "SMS Reply",
+            "Status": "New",
+            "Owner_Notified": "Yes"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-log-referral-sms",
+      "name": "Log Referral (SMS)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1080, 760],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "typeValidation": "loose" },
+          "conditions": [ { "leftValue": "={{ $('Parse Reply').item.json.alert_owner }}", "rightValue": "true", "operator": { "type": "boolean", "operation": "true", "singleValue": true } } ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-if-alert",
+      "name": "Owner Alert Needed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1080, 980]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.OWNER_EMAIL }}",
+        "subject": "={{ $('Parse Reply').item.json.complaint ? '⚠️ Complaint from ' : ($('Parse Reply').item.json.referral_provided ? '🎉 Referral from ' : '💬 Reply from ') }}{{ $('Parse Reply').item.json.customer_name || $('Parse Reply').item.json.customer_phone }}",
+        "emailType": "text",
+        "message": "=A customer replied to a referral request:\n\nName: {{ $('Parse Reply').item.json.customer_name }}\nPhone: {{ $('Parse Reply').item.json.customer_phone }}\nClassification: {{ $('Parse Reply').item.json.class }}\nSentiment: {{ $('Parse Reply').item.json.sentiment }}\nComplaint: {{ $('Parse Reply').item.json.complaint }}\nSummary: {{ $('Parse Reply').item.json.summary }}\n\nReferred (if any): {{ $('Parse Reply').item.json.referral.name }} / {{ $('Parse Reply').item.json.referral.phone }} — {{ $('Parse Reply').item.json.referral.service }}\n\nThey said: \"{{ $('Parse Reply').item.json.message_body }}\"\n\nWe auto-replied: \"{{ $('Parse Reply').item.json.suggested_reply }}\"",
+        "options": {}
+      },
+      "id": "node-alert-owner",
+      "name": "Alert Owner (Reply)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1320, 860],
+      "credentials": { "gmailOAuth2": { "id": "GMAIL_CRED", "name": "P&P Gmail" } },
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Trigger Webhook": { "main": [[{ "node": "Respond to Source", "type": "main", "index": 0 }, { "node": "Route Event", "type": "main", "index": 0 }]] },
+    "Route Event": { "main": [[{ "node": "Normalize Reply", "type": "main", "index": 0 }], [{ "node": "Normalize Customer", "type": "main", "index": 0 }]] },
+    "Normalize Customer": { "main": [[{ "node": "Find Existing Customer", "type": "main", "index": 0 }]] },
+    "Find Existing Customer": { "main": [[{ "node": "Qualify Customer", "type": "main", "index": 0 }]] },
+    "Qualify Customer": { "main": [[{ "node": "Eligible?", "type": "main", "index": 0 }]] },
+    "Eligible?": { "main": [[{ "node": "Log Eligible Customer", "type": "main", "index": 0 }], [{ "node": "Log Ineligible Customer", "type": "main", "index": 0 }]] },
+    "Log Eligible Customer": { "main": [[{ "node": "Record Status (Eligible)", "type": "main", "index": 0 }]] },
+    "Normalize Reply": { "main": [[{ "node": "Is Opt-Out?", "type": "main", "index": 0 }]] },
+    "Is Opt-Out?": { "main": [[{ "node": "Suppress (Opt-Out)", "type": "main", "index": 0 }], [{ "node": "Find Customer (Reply)", "type": "main", "index": 0 }]] },
+    "Suppress (Opt-Out)": { "main": [[{ "node": "Log Opt-Out", "type": "main", "index": 0 }]] },
+    "Find Customer (Reply)": { "main": [[{ "node": "Classify Reply (AI)", "type": "main", "index": 0 }]] },
+    "Classify Reply (AI)": { "main": [[{ "node": "Parse Reply", "type": "main", "index": 0 }]] },
+    "Parse Reply": { "main": [[{ "node": "Send AI Reply", "type": "main", "index": 0 }]] },
+    "Send AI Reply": { "main": [[{ "node": "Update Customer (Reply)", "type": "main", "index": 0 }]] },
+    "Update Customer (Reply)": { "main": [[{ "node": "Referral In Reply?", "type": "main", "index": 0 }]] },
+    "Referral In Reply?": { "main": [[{ "node": "Log Referral (SMS)", "type": "main", "index": 0 }], [{ "node": "Owner Alert Needed?", "type": "main", "index": 0 }]] },
+    "Log Referral (SMS)": { "main": [[{ "node": "Alert Owner (Reply)", "type": "main", "index": 0 }]] },
+    "Owner Alert Needed?": { "main": [[{ "node": "Alert Owner (Reply)", "type": "main", "index": 0 }], []] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true, "callerPolicy": "workflowsFromSameOwner" },
+  "active": false
+}

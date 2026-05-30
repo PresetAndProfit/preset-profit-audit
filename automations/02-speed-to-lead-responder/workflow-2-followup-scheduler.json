@@ -1,0 +1,152 @@
+{
+  "name": "P&P – Lead Capture & Follow-Up (Sequence Scheduler)",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [ { "field": "minutes", "minutesInterval": 15 } ] } },
+      "id": "node-cron",
+      "name": "Every 15 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-960, 300]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_LEADS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Leads", "mode": "name" },
+        "options": {}
+      },
+      "id": "node-read",
+      "name": "Read All Leads",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-720, 300],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Multi-touch sequence: step 1 (SMS +1h), step 2 (Email +1d), step 3 (SMS +3d) -> Cold.\nconst maxSteps = Number($env.MAX_FOLLOW_UPS || 3);\nconst now = $now;\nconst gaps = (($env.FOLLOW_UP_GAPS_MIN || '60,1440,4320').split(',')).map(n => Number(n.trim()));\nconst channels = (($env.FOLLOW_UP_CHANNELS || 'sms,email,sms').split(',')).map(s => s.trim());\nconst biz = $env.BUSINESS_NAME || 'us';\nconst out = [];\nfor (const item of $input.all()) {\n  const l = item.json;\n  const status = (l.Status || '').toLowerCase();\n  const active = status.includes('awaiting reply') || status.includes('followed up');\n  const hasReplied = !!l.Last_Inbound_At;\n  const step = Number(l.Sequence_Step || 0);\n  const due = l.Next_Follow_Up_At ? now >= $DateTime.fromISO(l.Next_Follow_Up_At) : false;\n  if (!(active && !hasReplied && step < maxSteps && due)) continue;\n  const nextStep = step + 1;\n  const isLast = nextStep >= maxSteps;\n  const channel = channels[step] || 'sms';\n  const name = l.Customer_Name ? (' ' + String(l.Customer_Name).split(' ')[0]) : '';\n  const smsMsg = isLast\n    ? `Last check-in from ${biz}${name} — still happy to help whenever you're ready. Just reply here. ${$env.BOOKING_LINK || ''}`.trim()\n    : `Hi${name}, following up from ${biz} about your request. Want us to get you scheduled? Reply here or book: ${$env.BOOKING_LINK || ''}`.trim();\n  const nextGap = gaps[nextStep] || 1440;\n  out.push({ json: { ...l, _channel: channel, _next_step: nextStep, _is_last: isLast, _sms_msg: smsMsg, _email_subject: `Following up – ${biz}`, _email_body: `Hi${name},\\n\\nJust following up on the request you sent us. We'd love to help — reply to this email or book a time here: ${$env.BOOKING_LINK || ''}\\n\\n— ${biz}`, _next_followup_at: isLast ? '' : now.plus({ minutes: nextGap }).toISO() } });\n}\nreturn out;"
+      },
+      "id": "node-filter",
+      "name": "Filter Due Follow-Ups",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-480, 300]
+    },
+    {
+      "parameters": { "batchSize": 1, "options": {} },
+      "id": "node-loop",
+      "name": "Loop Leads",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [-240, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": false, "typeValidation": "loose" },
+                "conditions": [ { "leftValue": "={{ $json._channel }}", "rightValue": "email", "operator": { "type": "string", "operation": "equals" } } ],
+                "combinator": "and"
+              },
+              "outputKey": "Email"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": false, "typeValidation": "loose" },
+                "conditions": [ { "leftValue": "={{ $json._channel }}", "rightValue": "sms", "operator": { "type": "string", "operation": "equals" } } ],
+                "combinator": "and"
+              },
+              "outputKey": "SMS"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "node-route-channel",
+      "name": "Route Channel",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.Customer_Email }}",
+        "subject": "={{ $json._email_subject }}",
+        "emailType": "text",
+        "message": "={{ $json._email_body }}",
+        "options": {}
+      },
+      "id": "node-followup-email",
+      "name": "Send Follow-Up Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [240, 180],
+      "credentials": { "gmailOAuth2": { "id": "GMAIL_CRED", "name": "P&P Gmail" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $env.TWILIO_NUMBER }}",
+        "to": "={{ $json.Customer_Phone }}",
+        "message": "={{ $json._sms_msg }}",
+        "options": {}
+      },
+      "id": "node-followup-sms",
+      "name": "Send Follow-Up SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [240, 420],
+      "credentials": { "twilioApi": { "id": "TWILIO_CRED", "name": "P&P Twilio" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "={{ $env.GSHEET_LEADS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Leads", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Customer_Phone"],
+          "value": {
+            "Customer_Phone": "={{ $json.Customer_Phone }}",
+            "Sequence_Step": "={{ $json._next_step }}",
+            "Follow_Up_Count": "={{ $json._next_step }}",
+            "Last_Outbound_At": "={{ $now.toISO() }}",
+            "Next_Follow_Up_At": "={{ $json._next_followup_at }}",
+            "Status": "={{ $json._is_last ? 'Cold - No Response' : 'Followed Up' }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-update",
+      "name": "Update Sequence State",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [480, 300],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GSHEETS_CRED", "name": "P&P Google Sheets" } }
+    }
+  ],
+  "connections": {
+    "Every 15 min": { "main": [[{ "node": "Read All Leads", "type": "main", "index": 0 }]] },
+    "Read All Leads": { "main": [[{ "node": "Filter Due Follow-Ups", "type": "main", "index": 0 }]] },
+    "Filter Due Follow-Ups": { "main": [[{ "node": "Loop Leads", "type": "main", "index": 0 }]] },
+    "Loop Leads": { "main": [[{ "node": "Route Channel", "type": "main", "index": 0 }]] },
+    "Route Channel": {
+      "main": [
+        [{ "node": "Send Follow-Up Email", "type": "main", "index": 0 }],
+        [{ "node": "Send Follow-Up SMS", "type": "main", "index": 0 }],
+        [{ "node": "Send Follow-Up SMS", "type": "main", "index": 0 }]
+      ]
+    },
+    "Send Follow-Up Email": { "main": [[{ "node": "Update Sequence State", "type": "main", "index": 0 }]] },
+    "Send Follow-Up SMS": { "main": [[{ "node": "Update Sequence State", "type": "main", "index": 0 }]] },
+    "Update Sequence State": { "main": [[{ "node": "Loop Leads", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
+  "active": false
+}

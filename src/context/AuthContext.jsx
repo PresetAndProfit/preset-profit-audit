@@ -41,25 +41,26 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     let active = true;
 
-    supabase.auth.getSession().then(async ({ data }) => {
-      if (!active) return;
-      setSession(data.session ?? null);
-      // finally guarantees the loading gate clears even if loadAccount throws,
-      // so the app can never get stuck on the loading spinner after login.
-      try {
-        await loadAccount(data.session?.user?.id);
-      } finally {
-        if (active) setLoading(false);
-      }
-    }).catch(() => { if (active) setLoading(false); });
-
+    // Drive auth state from onAuthStateChange ONLY. It emits an INITIAL_SESSION
+    // event immediately on subscribe (with the current session, or null), so we
+    // never call supabase.auth.getSession() — which can hang indefinitely on the
+    // auth lock and leave `loading` stuck true (→ ProtectedRoute spins forever →
+    // blank authenticated app).
     const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      if (!active) return;
       setSession(newSession ?? null);
-      loadAccount(newSession?.user?.id);
+      setLoading(false); // always clear the gate on the first auth event
+      // Defer DB reads OUT of the auth callback — calling supabase.from()/auth
+      // synchronously inside this callback can deadlock the auth lock.
+      setTimeout(() => { if (active) loadAccount(newSession?.user?.id); }, 0);
     });
+
+    // Safety net: never let the app hang on the loader if no event arrives.
+    const t = setTimeout(() => { if (active) setLoading(false); }, 3000);
 
     return () => {
       active = false;
+      clearTimeout(t);
       sub.subscription.unsubscribe();
     };
   }, [loadAccount]);

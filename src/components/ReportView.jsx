@@ -18,44 +18,6 @@ function EvidenceLine({ label, text, mono, accent }) {
   );
 }
 
-// High-converting call block: what-happens-on-the-call + risk reversal + one
-// dominant action. Borderless so it drops cleanly into existing panels.
-function BookCallBlock({ monthly }) {
-  const steps = [
-    ["1", "We confirm your real numbers", "We plug in your actual job value and volume — no guessing."],
-    ["2", "We show what fits you", "Exactly which systems move the needle for a business like yours."],
-    ["3", "You get exact pricing", "Clear fixed pricing. No obligation, no hard sell."],
-  ];
-  return (
-    <div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, marginBottom: 14 }}>
-        {steps.map(([n, t, d]) => (
-          <div key={n} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, padding: "12px 14px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-              <div style={{ width: 20, height: 20, borderRadius: "50%", background: "var(--amber-glow)", border: "1px solid var(--amber)", color: "var(--amber)", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{n}</div>
-              <div style={{ fontSize: 12, fontWeight: 700, fontFamily: "Syne" }}>{t}</div>
-            </div>
-            <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.5 }}>{d}</div>
-          </div>
-        ))}
-      </div>
-      <div style={{ display: "flex", gap: 8, alignItems: "center", background: "rgba(0,214,143,0.08)", border: "1px solid rgba(0,214,143,0.25)", borderRadius: 6, padding: "9px 14px", marginBottom: 16 }}>
-        <span style={{ fontSize: 14, flexShrink: 0 }}>🛡</span>
-        <span style={{ fontSize: 12, color: "var(--text)", fontWeight: 600 }}>30-day results guarantee — if a system we set up isn't working, we fix it free.</span>
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-start" }}>
-        <a href="https://presetandprofit.com/call" target="_blank" rel="noopener noreferrer"
-          style={{ background: "var(--amber)", color: "var(--ink)", padding: "13px 28px", borderRadius: 6, fontFamily: "IBM Plex Mono", fontSize: 14, fontWeight: 700, letterSpacing: "0.03em", textDecoration: "none", display: "inline-block", boxShadow: "0 0 24px rgba(245,166,35,0.25)" }}>
-          📞 Book My Free Strategy Call →
-        </a>
-        <div style={{ fontSize: 11, color: "var(--muted)" }}>
-          Free · 30 minutes · No obligation{monthly ? ` · Built to capture that ${monthly}` : ""}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 const findingIcon  = s => s === "good" ? "✓" : s === "warn" ? "⚠" : "✗";
 const findingColor = s => s === "good" ? "var(--green)" : s === "warn" ? "var(--amber)" : "var(--red)";
 const findingBorder = s => s === "good" ? "rgba(0,214,143,0.2)" : s === "warn" ? "rgba(245,166,35,0.2)" : "rgba(255,71,87,0.2)";
@@ -138,12 +100,6 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved, 
       setSharing(false);
     }
   };
-
-  // Total hours saved (for sticky bar)
-  const totalHours = (r.automations || []).reduce((sum, a) => {
-    const n = parseInt((a.timesSaved || "").replace(/\D/g, "")) || 0;
-    return sum + n;
-  }, 0);
 
   return (
     <>
@@ -320,7 +276,6 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved, 
               </div>
             </div>
 
-            {!shared && <BookCallBlock monthly={liveTotalMonthly} />}
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
@@ -510,17 +465,6 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved, 
               </div>
             </div>
           ))}
-          {!shared && <div style={{ background: "var(--panel)", border: "1px solid rgba(245,166,35,0.4)", borderRadius: 10, padding: "28px 24px", textAlign: "center" }}>
-            <div style={{ fontFamily: "Syne", fontSize: 18, fontWeight: 800, marginBottom: 8 }}>Want us to set this up for {r.businessName}?</div>
-            <p style={{ color: "var(--muted)", fontSize: 13, lineHeight: 1.7, maxWidth: 480, margin: "0 auto 8px" }}>We handle the full setup — usually done within 7 days. You don't need any tech skills or extra staff.</p>
-            <p style={{ color: "var(--muted)", fontSize: 13, lineHeight: 1.7, maxWidth: 480, margin: "0 auto 20px" }}>On the call we'll walk through exactly which systems make sense for your business and give you a clear price — no surprises.</p>
-            <div style={{ maxWidth: 560, margin: "0 auto", textAlign: "left" }}>
-              <BookCallBlock monthly={liveTotalMonthly} />
-            </div>
-            <button onClick={sendToClient} style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 11, marginTop: 14, textDecoration: "underline" }}>
-              {sent ? "✓ Report downloaded" : "Prefer to read it later? Download the report →"}
-            </button>
-          </div>}
         </div>
       )}
       {/* Footnote disclaimer — quiet, at bottom */}
@@ -529,45 +473,6 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved, 
       </div>
     </div>
 
-    {/* ── Sticky bottom CTA bar — visible on every tab (owner view only) ── */}
-    {!shared && <div style={{
-      position: "sticky", bottom: 0, zIndex: 15,
-      background: "linear-gradient(135deg, #111118 0%, #16161f 100%)",
-      borderTop: "1px solid rgba(245,166,35,0.35)",
-      boxShadow: "0 -8px 32px rgba(0,0,0,0.5)",
-      padding: "14px 40px",
-      display: "flex", justifyContent: "space-between", alignItems: "center",
-      gap: 16, flexWrap: "wrap",
-    }}>
-      <div style={{ flex: 1, minWidth: 200 }}>
-        <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 15, color: "var(--text)", marginBottom: 2 }}>
-          {r.businessName} is leaving ~{liveAnnual} on the table
-        </div>
-        <div style={{ fontSize: 11, color: "var(--muted)" }}>
-          That's {liveTotalMonthly} every month you wait{totalHours > 0 ? ` · saves ${totalHours} hrs/week` : ""} · we build and manage everything
-        </div>
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3, flexShrink: 0 }}>
-        <a
-          href="https://presetandprofit.com/call"
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            background: "var(--amber)", color: "var(--ink)",
-            padding: "12px 28px", borderRadius: 6,
-            fontFamily: "IBM Plex Mono", fontSize: 13, fontWeight: 700,
-            letterSpacing: "0.04em", textDecoration: "none",
-            display: "inline-block", whiteSpace: "nowrap",
-            boxShadow: "0 0 20px rgba(245,166,35,0.3)",
-          }}
-        >
-          📞 Book My Free Strategy Call →
-        </a>
-        <div style={{ fontSize: 10, color: "var(--muted)" }}>
-          Free · No obligation · Exact pricing on the call
-        </div>
-      </div>
-    </div>}
     </>
   );
 }

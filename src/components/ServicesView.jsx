@@ -26,31 +26,13 @@ export default function ServicesView() {
               <span style={{ color: "var(--muted)", fontSize: 13 }}>{pkg.priceNote}</span>
             </div>
             <div style={{ borderTop: "1px solid var(--border)", margin: "0 0 16px" }} />
-            <div style={{ display: "grid", gap: 10, marginBottom: 24 }}>
+            <div style={{ display: "grid", gap: 10 }}>
               {pkg.deliverables.map(d => (
                 <div key={d} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13 }}>
                   <span style={{ color: pkg.color, flexShrink: 0, marginTop: 1 }}>✓</span>
                   <span>{d}</span>
                 </div>
               ))}
-            </div>
-            <div>
-              <a
-                href="https://presetandprofit.com/call"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: "block", width: "100%", padding: 11, borderRadius: 6, cursor: "pointer",
-                  fontFamily: "IBM Plex Mono", fontSize: 12, fontWeight: 600, letterSpacing: "0.05em",
-                  transition: "all .2s", border: `1px solid ${pkg.color}`,
-                  background: pkg.highlight ? pkg.color : "transparent",
-                  color: pkg.highlight ? "var(--ink)" : pkg.color,
-                  textAlign: "center", textDecoration: "none", boxSizing: "border-box",
-                }}
-              >{pkg.cta}</a>
-              <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 8, letterSpacing: "0.05em" }}>
-                FREE STRATEGY CALL · NO OBLIGATION
-              </div>
             </div>
           </div>
         ))}
@@ -65,7 +47,7 @@ export default function ServicesView() {
       </div>
 
       <div style={{ textAlign: "center", marginTop: 24, color: "var(--muted)", fontSize: 12 }}>
-        Questions? Email <span style={{ color: "var(--amber)" }}>hello@presetandprofit.com</span> · All projects start with a free strategy call
+        Questions? Email <span style={{ color: "var(--amber)" }}>justin@presetprofit.com</span>
       </div>
     </div>
   );

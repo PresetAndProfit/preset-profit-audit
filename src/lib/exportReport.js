@@ -366,10 +366,10 @@ function ctaPage(r) {
       <div class="cta-footer-row">
         <div>
           <div class="cta-footer-brand">Preset &amp; Profit</div>
-          <div class="cta-footer-url">presetandprofit.com</div>
+          <div class="cta-footer-url">presetprofit.com</div>
         </div>
         <div class="cta-footer-contact">
-          hello@presetandprofit.com<br>
+          justin@presetprofit.com<br>
           All projects start with a free strategy call
         </div>
       </div>
@@ -824,7 +824,7 @@ export function buildHTML(r, { branding = null, watermark = false } = {}) {
   const whiteLabel = !!(branding && (branding.name || branding.logoUrl));
   const brand = {
     name: branding?.name || "Preset & Profit",
-    url: whiteLabel ? "" : "presetandprofit.com",
+    url: whiteLabel ? "" : "presetprofit.com",
     logoUrl: branding?.logoUrl || null,
     whiteLabel,
   };

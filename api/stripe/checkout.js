@@ -1,6 +1,6 @@
 // api/stripe/checkout.js — create a Stripe Checkout Session for a paid plan.
 // Auth required (Bearer access token). Returns { url } for the client to redirect to.
-import { stripe, priceIdForPlan, STRIPE_SDK_VERSION, stripeKeyDiagnostics } from "../_lib/stripe.js";
+import { stripe, priceIdForPlan } from "../_lib/stripe.js";
 import { supabaseAdmin, getUserFromRequest } from "../_lib/supabaseAdmin.js";
 import { getPlan } from "../../src/lib/plans.js";
 
@@ -27,63 +27,6 @@ export default async function handler(req, res) {
   const priceId = priceIdForPlan(plan.id);
   if (!priceId) return res.status(500).json({ error: "price-not-configured", plan: plan.id });
 
-  // Runtime + SDK breadcrumb. `edge` must be false — Stripe's Node HTTP client
-  // does not work on the Edge runtime and would cause connection errors.
-  console.log("[checkout] runtime", {
-    node: process.version,
-    edge: typeof globalThis.EdgeRuntime !== "undefined",
-    stripeSdk: STRIPE_SDK_VERSION,
-    region: process.env.VERCEL_REGION || null,
-    key: stripeKeyDiagnostics,
-  });
-
-  // ── TEMPORARY RAW CONNECTIVITY TEST ────────────────────────────────────────
-  // Bypass the Stripe SDK entirely and hit api.stripe.com with a raw fetch, to
-  // determine whether this serverless function can reach Stripe at all. Returns
-  // the result DIRECTLY (checkout is not created on this build). Remove once the
-  // transport question is answered.
-  {
-    const key = (process.env.STRIPE_SECRET_KEY || "").trim();
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 8000);
-    const started = Date.now();
-    try {
-      const r = await fetch("https://api.stripe.com/v1/prices?limit=1", {
-        headers: { Authorization: `Bearer ${key}` },
-        signal: ctrl.signal,
-      });
-      const text = await r.text();
-      const headers = Object.fromEntries(r.headers.entries());
-      const result = {
-        reached: true,
-        status: r.status,
-        ok: r.ok,
-        ms: Date.now() - started,
-        headers,
-        body: text.slice(0, 1000), // price data or a Stripe error — no secret
-      };
-      console.log("[checkout] RAW stripe fetch", { status: r.status, ms: result.ms, headers });
-      return res.status(200).json({ rawStripeTest: result, key: stripeKeyDiagnostics });
-    } catch (e) {
-      const result = {
-        reached: false,
-        aborted: e?.name === "AbortError",         // timeout
-        name: e?.name || "Error",
-        message: e?.message || String(e),
-        causeName: e?.cause?.name || null,
-        causeCode: e?.cause?.code || e?.code || null,   // ENOTFOUND (DNS), TLS codes, ECONNRESET…
-        causeMessage: e?.cause?.message || null,
-        ms: Date.now() - started,
-      };
-      console.error("[checkout] RAW stripe fetch FAILED", result);
-      return res.status(502).json({ rawStripeTest: result, key: stripeKeyDiagnostics });
-    } finally {
-      clearTimeout(t);
-    }
-  }
-  // ── END RAW CONNECTIVITY TEST ──────────────────────────────────────────────
-
-  /* eslint-disable no-unreachable -- temporary: raw test above returns directly */
   try {
     // Reuse the Stripe customer if we've already created one for this user.
     const { data: sub } = await supabaseAdmin

@@ -28,8 +28,12 @@ export const stripe = new Stripe(secret || "sk_test_missing", {
   // Pin nothing here on purpose — use the account's default API version so a
   // dashboard upgrade doesn't require a code change. Pin later if needed.
   appInfo: { name: "Preset & Profit" },
-  // Fail fast on transport errors instead of masking them behind retries, so
-  // the real connectivity failure surfaces immediately.
+  // Use the fetch-based HTTP client (undici/global fetch) instead of Node's
+  // default https agent. On this serverless runtime the https client can't
+  // reach api.stripe.com (StripeConnectionError) while fetch-based clients work
+  // fine (Supabase + the site scanner both use fetch successfully here).
+  httpClient: Stripe.createFetchHttpClient(),
+  // Fail fast on transport errors instead of masking them behind retries.
   maxNetworkRetries: 0,
   timeout: 20000,
 });

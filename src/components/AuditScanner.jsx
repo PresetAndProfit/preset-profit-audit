@@ -43,7 +43,11 @@ export default function AuditScanner({ onComplete, onScanStart, onScanEnd }) {
     // so the analysis happens while the phases play out.
     const trimmedUrl = form.url.trim();
     const scanPromise = trimmedUrl
-      ? authedFetch("/api/analyze-site", { body: { url: trimmedUrl } })
+      ? authedFetch("/api/analyze-site", {
+          // Pass the business context so the server can run the AI consultant
+          // analysis (classification + site-grounded findings) on the scrape.
+          body: { url: trimmedUrl, bizName: form.bizName, industry: form.industry, city: form.city },
+        })
           .then(r => r.json()).catch(() => null)
       : Promise.resolve(null);
 

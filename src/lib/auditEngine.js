@@ -183,19 +183,45 @@ export function generateAudit(form, siteAnalysis = null) {
   const scan = siteAnalysis && siteAnalysis.ok && Array.isArray(siteAnalysis.findings) && siteAnalysis.findings.length
     ? siteAnalysis : null;
 
+  // When the server ran the AI consultant on a real scrape, its site-grounded
+  // findings ARE the report. Otherwise fall back to the scan heuristics, then to
+  // the industry-typical template pool.
+  const aiReport = scan && siteAnalysis.aiGenerated && siteAnalysis.ai ? siteAnalysis.ai : null;
+
   let leadFindings, websiteFindings, overallScore, leadScore, websiteScore;
 
-  if (scan) {
-    const rank = { bad: 0, warn: 1, good: 2 };
-    const sortF = arr => [...arr].sort((a, b) => rank[a.status] - rank[b.status]);
+  const rank = { bad: 0, warn: 1, good: 2 };
+  const sortF = arr => [...arr].sort((a, b) => rank[a.status] - rank[b.status]);
+  const scoreOf = arr => {
+    if (!arr.length) return 70;
+    let s = 72;
+    for (const f of arr) s += f.status === "good" ? 6 : f.status === "warn" ? -8 : -15;
+    return Math.max(30, Math.min(97, Math.round(s)));
+  };
+
+  if (aiReport) {
+    // Map the consultant's findings into the report's finding shape. Lead-side
+    // areas (leads/conversion/retention) vs site-side (website/trust/local).
+    const mapped = aiReport.findings.map(f => ({
+      label: f.title,
+      status: f.status,
+      area: ["leads", "conversion", "retention"].includes(f.area) ? "leads" : "website",
+      what: f.observation,
+      why: f.impact,
+      proof: f.grounded ? `${f.observation} (${f.evidence})` : f.observation,
+      fix: f.recommendation,
+      detail: f.impact,
+      personalNote: f.observation,
+      grounded: f.grounded,
+    }));
+    leadFindings    = sortF(mapped.filter(f => f.area === "leads"));
+    websiteFindings = sortF(mapped.filter(f => f.area === "website"));
+    leadScore    = scoreOf(leadFindings);
+    websiteScore = scoreOf(websiteFindings);
+    overallScore = Math.round((leadScore + websiteScore) / 2);
+  } else if (scan) {
     leadFindings    = sortF(scan.findings.filter(f => f.area === "leads"));
     websiteFindings = sortF(scan.findings.filter(f => f.area === "website"));
-    const scoreOf = arr => {
-      if (!arr.length) return 70;
-      let s = 72;
-      for (const f of arr) s += f.status === "good" ? 6 : f.status === "warn" ? -8 : -15;
-      return Math.max(30, Math.min(97, Math.round(s)));
-    };
     leadScore    = scoreOf(leadFindings);
     websiteScore = scoreOf(websiteFindings);
     overallScore = Math.round((leadScore + websiteScore) / 2);
@@ -305,7 +331,9 @@ export function generateAudit(form, siteAnalysis = null) {
   );
 
   // Quick wins: when we scanned, these ARE the fixes for what we actually found.
-  let quickWins = (scan && realIssues.length)
+  let quickWins = (aiReport && Array.isArray(aiReport.quickWins) && aiReport.quickWins.length)
+    ? aiReport.quickWins.slice(0, 3)
+    : (scan && realIssues.length)
     ? realIssues.slice(0, 3).map(f => f.fix).filter(Boolean)
     : shuffle(QUICK_WINS_POOL.map(fn => fn(siteRef)), rand).slice(0, 3);
   if (quickWins.length < 3) {
@@ -316,7 +344,9 @@ export function generateAudit(form, siteAnalysis = null) {
 
   // Benchmark — when scanned, anchor it to what THEY actually have vs. miss.
   let competitorGap;
-  if (scan && (wins.length || realIssues.length)) {
+  if (aiReport && aiReport.competitorBenchmark) {
+    competitorGap = aiReport.competitorBenchmark;
+  } else if (scan && (wins.length || realIssues.length)) {
     const haveClause = wins.length
       ? `${bizName} already has some of what the best ${industry.toLowerCase()} businesses have — ${listJoin(wins)}. ` : "";
     const missClause = realIssues.length
@@ -330,7 +360,9 @@ export function generateAudit(form, siteAnalysis = null) {
 
   // Executive summary — when scanned, written from real observations.
   let executiveSummary;
-  if (scan) {
+  if (aiReport && aiReport.executiveSummary) {
+    executiveSummary = aiReport.executiveSummary;
+  } else if (scan) {
     const serviceClause = services.length ? ` On your homepage we saw ${listJoin(services)}.` : "";
     const winsClause    = wins.length ? ` The fundamentals are in good shape — ${listJoin(wins)}.` : "";
     const top = realIssues[0];
@@ -358,6 +390,8 @@ export function generateAudit(form, siteAnalysis = null) {
     leadFindings, websiteFindings,
     // Real-scan provenance — drives the "we actually looked at your site" banner.
     siteScanned: !!scan,
+    aiGenerated: !!aiReport,
+    detectedBusinessType: aiReport ? aiReport.businessType : null,
     siteSignals: scan ? scan.signals : null,
     scannedAt: scan ? (siteAnalysis.scannedAt || new Date().toISOString()) : null,
     scanError: (!scan && siteAnalysis && siteAnalysis.ok === false) ? (siteAnalysis.error || "unreachable") : null,

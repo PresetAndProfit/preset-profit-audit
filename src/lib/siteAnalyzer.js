@@ -122,6 +122,55 @@ export function analyzeHtml(html, meta = {}) {
     .filter(t => t && t.length >= 3 && t.length <= 40);
   const services = [...new Set(headingTexts)].slice(0, 6);
 
+  // ── richer commerce/hospitality/contact signals (evidence for classification
+  //    and for industry-specific findings) ──────────────────────────────────
+  // Online ordering / delivery platforms (restaurant + retail).
+  const orderingProvider = [
+    ["Toast", /toasttab\.com|toastted/i], ["Square Online", /square\.online|squareup\.com\/(store|online)/i],
+    ["ChowNow", /chownow\.com/i], ["Olo", /olo\.com/i], ["Slice", /slicelife\.com/i],
+    ["DoorDash", /doordash\.com/i], ["Uber Eats", /ubereats\.com/i], ["Grubhub", /grubhub\.com/i],
+    ["Clover", /clover\.com\/online-ordering/i],
+  ].find(([, re]) => re.test(html));
+  // Reservation/waitlist platforms (hospitality).
+  const reservationProvider = [
+    ["OpenTable", /opentable\.com/i], ["Resy", /resy\.com/i], ["Yelp Reservations", /yelp\.com\/reservations/i],
+    ["Tock", /exploretock\.com/i], ["SevenRooms", /sevenrooms\.com/i], ["Waitlist", /waitlist|join the line/i],
+  ].find(([, re]) => re.test(html));
+  // E-commerce platforms / cart.
+  const ecommercePlatform = [
+    ["Shopify", /cdn\.shopify\.com|myshopify\.com/i], ["WooCommerce", /woocommerce/i],
+    ["BigCommerce", /bigcommerce\.com/i], ["Squarespace Commerce", /squarespace.*commerce/i],
+    ["Wix Stores", /wixstores|ecom\.wix/i],
+  ].find(([, re]) => re.test(html));
+  const hasCart = ecommercePlatform != null
+    || /add to cart|add to bag|view cart|checkout|shopping cart/i.test(text)
+    || clickables.some(c => /\b(add to (cart|bag)|checkout|shop now|buy now)\b/i.test(c));
+  // Menu (hospitality) — a link or nav item to a menu, or a menu heading.
+  const hasMenu = /href=["'][^"']*menu[^"']*["']/i.test(html)
+    || clickables.some(c => /\b(view|see|our)?\s*menu\b/i.test(c))
+    || /\bour menu\b|\bdinner menu\b|\blunch menu\b|\bfood menu\b/i.test(text);
+  // Catering / events / private dining — the ONE case where a restaurant
+  // legitimately has a "consultation"/quote-style conversion path.
+  const hasCateringEvents = /\b(catering|private dining|private events?|event space|book(ing)? (an )?event|host your)\b/i.test(text);
+  // Visible pricing (prices on the page, or a pricing/menu price pattern).
+  const priceMatches = (text.match(/\$\s?\d{1,5}(?:[.,]\d{2})?/g) || []).length;
+  const pricingVisible = priceMatches >= 3 || /\bpricing\b|\bprice list\b|\brates?\b/i.test(text);
+  // Opening hours.
+  const hasHours = /\b(mon|tue|wed|thu|fri|sat|sun)(day)?\b[\s\S]{0,40}?\d{1,2}\s?(am|pm|:\d{2})/i.test(text)
+    || /\b(hours|open(ing)? hours|hours of operation)\b/i.test(text);
+  // Physical address / service location (schema PostalAddress or a street line).
+  const hasAddress = /"@type"\s*:\s*"PostalAddress"/i.test(html)
+    || /\b\d{1,6}\s+[A-Za-z0-9.\s]{3,40}\b(st|street|ave|avenue|rd|road|blvd|boulevard|dr|drive|ln|lane|way|suite|ste)\b/i.test(text);
+  // Social profiles.
+  const social = [
+    ["Instagram", /instagram\.com\//i], ["Facebook", /facebook\.com\//i],
+    ["TikTok", /tiktok\.com\//i], ["Yelp", /yelp\.com\/biz/i], ["YouTube", /youtube\.com\/(c|channel|@)/i],
+  ].filter(([, re]) => re.test(html)).map(([n]) => n);
+  // The most prominent action words actually present on the page (deduped).
+  const ctaTexts = [...new Set(clickables
+    .filter(c => c.length >= 2 && c.length <= 32 && /[a-z]/i.test(c))
+    .map(c => c.trim()))].slice(0, 20);
+
   const signals = {
     requestedUrl: meta.requestedUrl || null,
     finalUrl: meta.finalUrl || meta.requestedUrl || null,
@@ -146,6 +195,19 @@ export function analyzeHtml(html, meta = {}) {
     imgCount,
     bytes,
     services,
+    // commerce / hospitality / contact evidence (for classification + findings)
+    ordering: orderingProvider ? orderingProvider[0] : null,
+    reservation: reservationProvider ? reservationProvider[0] : null,
+    ecommercePlatform: ecommercePlatform ? ecommercePlatform[0] : null,
+    hasCart,
+    hasMenu,
+    hasCateringEvents,
+    pricingVisible,
+    priceCount: priceMatches,
+    hasHours,
+    hasAddress,
+    social,
+    ctaTexts,
   };
 
   // ── evidence findings ─────────────────────────────────────────────────────

@@ -64,7 +64,7 @@ export const PLANS = {
     watermark: false,
     whiteLabel: true,
     shareLinks: true,
-    trialDays: 14,
+    trialDays: 0, // Agency is billed immediately — no free trial.
     blurb: "White-label audits for your clients.",
     features: [
       "Unlimited audits",

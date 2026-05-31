@@ -36,6 +36,25 @@ export default async function handler(req, res) {
       .maybeSingle();
 
     let customerId = sub?.stripe_customer_id || null;
+
+    // Migration-safe: a customer created in a different Stripe mode (e.g. a test
+    // customer saved while testing) does not exist under the current (live) key,
+    // which raises "No such customer". Verify the stored ID in the active mode;
+    // if it's missing or deleted, drop it so a fresh one is created below.
+    if (customerId) {
+      try {
+        const existing = await stripe.customers.retrieve(customerId);
+        if (existing?.deleted) customerId = null;
+      } catch (e) {
+        if (e?.statusCode === 404 || e?.code === "resource_missing") {
+          console.warn("[checkout] stored customer not in current mode, recreating", { userId: user.id });
+          customerId = null;
+        } else {
+          throw e;
+        }
+      }
+    }
+
     if (!customerId) {
       const customer = await stripe.customers.create({
         email: user.email,

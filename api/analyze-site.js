@@ -33,7 +33,10 @@ async function runConsultant({ signals, bizName, industry, city, url }) {
       console.error("[analyze-site] consultant call failed", attempt, e?.message || e);
       return null; // hard error → deterministic fallback
     }
-    const { ok, violations } = validateReport(report, { signals });
+    // No client-supplied levers in this flow (homepage-only scrape), so the
+    // validator rejects any assumption labeled "client_input". city is the
+    // LOCATION hint — the validator forbids echoing it as observed geography.
+    const { ok, violations } = validateReport(report, { signals, clientInputs: new Set(), locationHint: city });
     if (ok) {
       const coverage = mustMentionCoverage(report);
       console.log("[analyze-site] consultant ok", {

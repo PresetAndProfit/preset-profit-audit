@@ -54,11 +54,13 @@ export function analyzeHtml(html, meta = {}) {
     return { ok: false, error: "empty document", signals: {}, findings: [] };
   }
 
-  const lower = html.toLowerCase();
   const text = visibleText(html);
   const clickables = extractClickables(html);
   const bytes = meta.bytes ?? html.length;
-  const secure = meta.secure !== false; // default optimistic only if unknown
+  // P1: secure is TRUE only when https was actually observed, FALSE only when
+  // http was observed, and null when TLS state was never measured. null means
+  // "unknown" — never present an optimistic default as a verified positive.
+  const secure = meta.secure === true ? true : (meta.secure === false ? false : null);
 
   // ── raw observations ────────────────────────────────────────────────────────
   const title = decode(firstMatch(/<title[^>]*>([\s\S]*?)<\/title>/i, html) || "");
@@ -74,7 +76,7 @@ export function analyzeHtml(html, meta = {}) {
     .map(s => firstMatch(/mailto:([^"']+)/i, s)).filter(Boolean);
   // Require a real phone shape (NANP 3-3-4, optional country/area parens) so we
   // don't false-match years, version numbers, or prices.
-  const phoneTextMatch = text.match(/(\+?1[\s.\-]?)?\(?\d{3}\)?[\s.\-]\d{3}[\s.\-]\d{4}\b/);
+  const phoneTextMatch = text.match(/(\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b/);
   const hasForm = /<form[\s\S]*?<\/form>/i.test(html) || /<input[^>]+type=["'](?:email|tel|text)["']/i.test(html);
 
   // booking providers / intent
@@ -152,9 +154,11 @@ export function analyzeHtml(html, meta = {}) {
   // Catering / events / private dining — the ONE case where a restaurant
   // legitimately has a "consultation"/quote-style conversion path.
   const hasCateringEvents = /\b(catering|private dining|private events?|event space|book(ing)? (an )?event|host your)\b/i.test(text);
-  // Visible pricing (prices on the page, or a pricing/menu price pattern).
-  const priceMatches = (text.match(/\$\s?\d{1,5}(?:[.,]\d{2})?/g) || []).length;
-  const pricingVisible = priceMatches >= 3 || /\bpricing\b|\bprice list\b|\brates?\b/i.test(text);
+  // Visible pricing. P3: require cents so phone-adjacent figures like "$5,000 audit"
+  // or "$0 down" don't inflate the count. P2: pricingVisible is gated on real
+  // price tokens only (>=3), never on the word "pricing"/"rates" appearing.
+  const priceMatches = (text.match(/\$\s?\d{1,4}(?:[.,]\d{2})\b/g) || []).length;
+  const pricingVisible = priceMatches >= 3;
   // Opening hours.
   const hasHours = /\b(mon|tue|wed|thu|fri|sat|sun)(day)?\b[\s\S]{0,40}?\d{1,2}\s?(am|pm|:\d{2})/i.test(text)
     || /\b(hours|open(ing)? hours|hours of operation)\b/i.test(text);
@@ -215,8 +219,8 @@ export function analyzeHtml(html, meta = {}) {
   let n = 0;
   const add = (area, status, f) => findings.push({ id: `f${++n}`, area, status, ...f });
 
-  // SECURITY
-  if (!secure) {
+  // SECURITY — only emit when TLS was actually measured (secure !== null).
+  if (secure === false) {
     add("website", "bad", {
       label: "Your site isn't served securely (no HTTPS)",
       what: "The homepage loads over an insecure http:// connection.",
@@ -225,7 +229,7 @@ export function analyzeHtml(html, meta = {}) {
       fix: "Install a free SSL certificate (most hosts offer one in one click) and force all traffic to https://.",
       impact: "Removes the browser warning that turns away first-time visitors before they read a word.",
     });
-  } else {
+  } else if (secure === true) {
     add("website", "good", {
       label: "Your site loads over a secure connection",
       what: "The homepage is served securely over HTTPS.",

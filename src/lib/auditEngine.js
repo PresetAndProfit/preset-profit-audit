@@ -27,9 +27,8 @@ const listJoin = arr =>
 const firstLower = s => (s ? s.charAt(0).toLowerCase() + s.slice(1) : s);
 const stripDot   = s => (s || "").replace(/\.\s*$/, "");
 
-function findingPersonalNote(label, { bizName, siteRef, industry, city, avgJobValue, monthlyJobs, noShowRate }) {
+function findingPersonalNote(label, { bizName, siteRef, industry, city }) {
   const cityRef = city || "your area";
-  const noShows = Math.round(monthlyJobs * noShowRate);
   const notes = {
     "No chat window on your website":
       `Most ${industry} enquiries happen after 6pm. Right now, ${siteRef} has no way to capture those visitors.`,
@@ -125,7 +124,7 @@ function automationPersonalIntro(name, { bizName, industry, city, avgJobValue, m
   }
 }
 
-function buildPersonalRecommendation(goal, { bizName, siteRef, city, totalMonthlyOpportunity, industry }) {
+function buildPersonalRecommendation(goal, { bizName, siteRef, city, industry }) {
   const cityRef = city ? ` in ${city}` : "";
   switch (goal) {
     case "More Leads":
@@ -161,7 +160,6 @@ export function generateAudit(form, siteAnalysis = null) {
   const rawUrl  = (form.url || "").trim();
   const url     = rawUrl ? rawUrl.replace(/^https?:\/\//i, "").replace(/\/$/, "") : "their website";
   const siteRef = url !== "their website" ? url : `${bizName}'s website`;
-  const cityRef = city ? `in ${city}` : "in your area";
 
   const seed = bizName + industry + rawUrl + goal;
   const rand = mkRand(seed);
@@ -200,20 +198,30 @@ export function generateAudit(form, siteAnalysis = null) {
   };
 
   if (aiReport) {
-    // Map the consultant's findings into the report's finding shape. Lead-side
-    // areas (leads/conversion/retention) vs site-side (website/trust/local).
-    const mapped = aiReport.findings.map(f => ({
-      label: f.title,
-      status: f.status,
-      area: ["leads", "conversion", "retention"].includes(f.area) ? "leads" : "website",
-      what: f.observation,
-      why: f.impact,
-      proof: f.grounded ? `${f.observation} (${f.evidence})` : f.observation,
-      fix: f.recommendation,
-      detail: f.impact,
-      personalNote: f.observation,
-      grounded: f.grounded,
-    }));
+    // Map the V3 consultant findings into the report's finding shape (back-compat
+    // for the existing findings tab). evidence is now [{type,signal,text}] and
+    // impact is an object — flatten both. Lead-side areas (leads/conversion/
+    // retention) vs site-side (website/trust/local).
+    const mapped = aiReport.findings.map(f => {
+      const im = f.impact || {};
+      const evidenceText = Array.isArray(f.evidence) ? f.evidence.map(e => e.text).filter(Boolean).join(" • ") : (f.evidence || "");
+      return {
+        id: f.id,
+        label: f.title,
+        status: f.status,
+        area: ["leads", "conversion", "retention"].includes(f.area) ? "leads" : "website",
+        rawArea: f.area,
+        what: f.observation,
+        why: im.narrative || f.observation,
+        proof: evidenceText || f.observation,
+        evidence: f.evidence,                 // keep the structured bullets for the V3 UI
+        fix: f.recommendation,
+        detail: im.narrative,
+        personalNote: f.observation,
+        grounded: f.grounded,
+        impact: im,                           // {narrative, lostRevenueLow/High, revenueLabel, confidence}
+      };
+    });
     leadFindings    = sortF(mapped.filter(f => f.area === "leads"));
     websiteFindings = sortF(mapped.filter(f => f.area === "website"));
     leadScore    = scoreOf(leadFindings);
@@ -344,8 +352,8 @@ export function generateAudit(form, siteAnalysis = null) {
 
   // Benchmark — when scanned, anchor it to what THEY actually have vs. miss.
   let competitorGap;
-  if (aiReport && aiReport.competitorBenchmark) {
-    competitorGap = aiReport.competitorBenchmark;
+  if (aiReport && (aiReport.competitorBenchmark || aiReport.competitiveBenchmark?.summary)) {
+    competitorGap = aiReport.competitorBenchmark || aiReport.competitiveBenchmark.summary;
   } else if (scan && (wins.length || realIssues.length)) {
     const haveClause = wins.length
       ? `${bizName} already has some of what the best ${industry.toLowerCase()} businesses have — ${listJoin(wins)}. ` : "";
@@ -392,6 +400,15 @@ export function generateAudit(form, siteAnalysis = null) {
     siteScanned: !!scan,
     aiGenerated: !!aiReport,
     detectedBusinessType: aiReport ? aiReport.businessType : null,
+    // V3 Consultant Intelligence blocks (pass-through; null on the fallback path).
+    businessIntelligence: aiReport ? aiReport.businessIntelligence || null : null,
+    executiveBrief: aiReport ? aiReport.executiveBrief || null : null,
+    competitiveBenchmark: aiReport ? aiReport.competitiveBenchmark || null : null,
+    revenueLeaks: aiReport ? aiReport.revenueLeaks || null : null,
+    revenueLeakSummary: aiReport ? aiReport.revenueLeakSummary || null : null,
+    automationPlan: aiReport ? aiReport.automationPlan || null : null,
+    priorityMatrix: aiReport ? aiReport.priorityMatrix || null : null,
+    implementationRoadmap: aiReport ? aiReport.implementationRoadmap || null : null,
     siteSignals: scan ? scan.signals : null,
     scannedAt: scan ? (siteAnalysis.scannedAt || new Date().toISOString()) : null,
     scanError: (!scan && siteAnalysis && siteAnalysis.ok === false) ? (siteAnalysis.error || "unreachable") : null,

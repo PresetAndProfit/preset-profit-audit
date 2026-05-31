@@ -20,6 +20,9 @@ dist-ssr
 # Claude Code local (machine-specific permission allowlist)
 .claude/settings.local.json
 
+# Scratch output from scripts/test-ai-audit.mjs (live engine test)
+ai-audit-sample.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

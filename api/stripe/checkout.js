@@ -1,6 +1,6 @@
 // api/stripe/checkout.js — create a Stripe Checkout Session for a paid plan.
 // Auth required (Bearer access token). Returns { url } for the client to redirect to.
-import { stripe, priceIdForPlan, STRIPE_SDK_VERSION } from "../_lib/stripe.js";
+import { stripe, priceIdForPlan, STRIPE_SDK_VERSION, stripeKeyDiagnostics } from "../_lib/stripe.js";
 import { supabaseAdmin, getUserFromRequest } from "../_lib/supabaseAdmin.js";
 import { getPlan } from "../../src/lib/plans.js";
 
@@ -34,6 +34,7 @@ export default async function handler(req, res) {
     edge: typeof globalThis.EdgeRuntime !== "undefined",
     stripeSdk: STRIPE_SDK_VERSION,
     region: process.env.VERCEL_REGION || null,
+    key: stripeKeyDiagnostics,
   });
 
   // Connectivity preflight: a lightweight GET to Stripe. If the network/transport
@@ -48,8 +49,8 @@ export default async function handler(req, res) {
       message: e?.message || String(e),
       requestId: e?.requestId || null,
     };
-    console.error("[checkout] stripe connectivity/price preflight failed", info);
-    return res.status(502).json({ error: "stripe-unreachable", stripe: info });
+    console.error("[checkout] stripe connectivity/price preflight failed", { ...info, key: stripeKeyDiagnostics });
+    return res.status(502).json({ error: "stripe-unreachable", stripe: info, key: stripeKeyDiagnostics });
   }
 
   try {

@@ -17,7 +17,13 @@ async function authedPost(path, body) {
   let json = null;
   try { json = await res.json(); } catch { /* non-JSON */ }
   if (!res.ok) {
-    throw new Error(json?.error || `request-failed-${res.status}`);
+    // Prefer the specific Stripe message / detail when present, so the UI shows
+    // the real cause (e.g. "No such price …") instead of a generic code.
+    const message = json?.stripe?.message || json?.detail || json?.error || `request-failed-${res.status}`;
+    const err = new Error(message);
+    err.code = json?.error || null;
+    err.stripe = json?.stripe || null;
+    throw err;
   }
   return json;
 }

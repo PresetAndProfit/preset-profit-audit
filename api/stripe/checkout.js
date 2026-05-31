@@ -12,6 +12,13 @@ export default async function handler(req, res) {
   const user = await getUserFromRequest(req);
   if (!user) return res.status(401).json({ error: "unauthorized" });
 
+  // Env preflight — reports exactly which Stripe variable is missing so the
+  // misconfiguration is visible client-side. Only presence is checked; no
+  // secret values are ever returned.
+  if (!process.env.STRIPE_SECRET_KEY) return res.status(500).json({ error: "missing_secret_key" });
+  if (!process.env.STRIPE_PRICE_PROFESSIONAL) return res.status(500).json({ error: "missing_professional_price" });
+  if (!process.env.STRIPE_PRICE_AGENCY) return res.status(500).json({ error: "missing_agency_price" });
+
   const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
   const planId = body.plan;
   const plan = getPlan(planId);
@@ -43,6 +50,12 @@ export default async function handler(req, res) {
         );
     }
 
+    // Server-side breadcrumb (Vercel logs). priceId / customerId are not secret.
+    console.log("[checkout] creating session", {
+      userId: user.id, plan: plan.id, priceId, hasCustomer: !!customerId,
+      successUrl: `${APP_URL}/?checkout=success`, cancelUrl: `${APP_URL}/?checkout=cancel`,
+    });
+
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
@@ -59,7 +72,16 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ url: session.url });
   } catch (e) {
-    console.error("[checkout]", e);
-    return res.status(500).json({ error: "checkout-failed", detail: String(e?.message || e) });
+    // Stripe SDK errors carry type/code/param/message. Stripe redacts API keys
+    // in its own messages and price IDs aren't secret, so these are safe to
+    // surface to the UI. Full context is logged server-side (Vercel logs).
+    const stripeErr = {
+      type: e?.type || e?.name || "Error",
+      code: e?.code || null,
+      param: e?.param || null,
+      message: e?.message || String(e),
+    };
+    console.error("[checkout] stripe error", { ...stripeErr, requestId: e?.requestId || null });
+    return res.status(500).json({ error: "checkout-failed", detail: stripeErr.message, stripe: stripeErr });
   }
 }

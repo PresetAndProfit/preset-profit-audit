@@ -8,7 +8,6 @@ import SharedReport from "./components/SharedReport.jsx";
 import LegalPage from "./components/legal/LegalPage.jsx";
 import AppShell from "./components/AppShell.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
-import AuthDiagnostic from "./components/AuthDiagnostic.jsx"; // TEMPORARY
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Router root. Public auth routes are open; everything under "/*" requires a
@@ -31,11 +30,7 @@ export default function App() {
             path="/*"
             element={
               <ProtectedRoute>
-                {/* TEMPORARY: diagnostic panel renders above the shell and can't go blank */}
-                <AuthDiagnostic />
-                <ErrorBoundary>
-                  <AppShell />
-                </ErrorBoundary>
+                <AppShell />
               </ProtectedRoute>
             }
           />

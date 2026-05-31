@@ -5,7 +5,7 @@
 //
 // POST /api/audits/create  Body: { audit }  Header: Authorization: Bearer <token>
 import { supabaseAdmin, getUserFromRequest } from "../_lib/supabaseAdmin.js";
-import { assertCanCreateAudit, logUsageEvent } from "../_lib/usageServer.js";
+import { assertCanCreateAudit, enforceAuditLimitForClient, logUsageEvent } from "../_lib/usageServer.js";
 
 function reportToRow(userId, audit) {
   return {
@@ -57,6 +57,16 @@ export default async function handler(req, res) {
     if (error) {
       console.error("[audits/create] upsert failed", error);
       return res.status(500).json({ error: "save-failed" });
+    }
+
+    // Race guard: the pre-check above is not atomic with the insert, so re-verify
+    // after writing. If a concurrent request pushed us over the limit, this drops
+    // the row we just created and reports over-limit (only for brand-new audits).
+    if (!existing) {
+      const reconciled = await enforceAuditLimitForClient(user.id, String(audit.id));
+      if (!reconciled.ok) {
+        return res.status(402).json({ error: "limit-reached", limit: reconciled.limit });
+      }
     }
 
     if (!existing) {

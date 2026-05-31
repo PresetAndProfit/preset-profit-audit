@@ -71,7 +71,13 @@ export function normalizeStatus(stripeStatus) {
       return "past_due";
     case "incomplete_expired":
       return "canceled";
+    case "paused":
+      // Intentionally paused collection → no paid entitlement.
+      return "canceled";
     default:
-      return "active";
+      // Unknown/future status: fail CLOSED. "incomplete" satisfies the DB CHECK
+      // constraint and is NOT an entitled status, so an unrecognized state can
+      // never silently grant unlimited audits.
+      return "incomplete";
   }
 }

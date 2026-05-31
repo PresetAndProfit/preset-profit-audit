@@ -3,7 +3,7 @@
 // subscription row so the rest of the app can gate features by plan.
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { supabase } from "../lib/supabaseClient.js";
-import { getPlan } from "../lib/plans.js";
+import { effectivePlan } from "../lib/plans.js";
 
 const AuthContext = createContext(null);
 
@@ -93,7 +93,10 @@ export function AuthProvider({ children }) {
 
   const refreshAccount = useCallback(() => loadAccount(user?.id), [loadAccount, user?.id]);
 
-  const plan = getPlan(subscription?.plan);
+  // Entitlement (and the plan shown in the UI) must account for status, not just
+  // the stored plan id — a canceled/unpaid subscriber drops back to free. Mirrors
+  // the authoritative server-side check in api/_lib/usageServer.js.
+  const plan = effectivePlan(subscription);
 
   const value = {
     session,

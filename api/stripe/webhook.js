@@ -36,12 +36,27 @@ export default async function handler(req, res) {
   }
 
   try {
+    let result = { ok: true };
     switch (event.type) {
       case "customer.subscription.created":
       case "customer.subscription.updated":
       case "customer.subscription.deleted":
-        await syncSubscriptionRecord(event.data.object);
+        result = await syncSubscriptionRecord(event.data.object);
         break;
+
+      // Stripe fires these on dunning. They also produce a
+      // customer.subscription.updated (status → past_due / active), but re-syncing
+      // here makes failed-payment and recovery state propagate promptly.
+      case "invoice.payment_failed":
+      case "invoice.paid":
+      case "invoice.payment_succeeded": {
+        const invoice = event.data.object;
+        if (invoice.subscription) {
+          const sub = await stripe.subscriptions.retrieve(invoice.subscription);
+          result = await syncSubscriptionRecord(sub);
+        }
+        break;
+      }
 
       case "checkout.session.completed": {
         // Fetch the full subscription so we have items/price/period fields.
@@ -52,7 +67,7 @@ export default async function handler(req, res) {
           if (!sub.metadata?.supabase_user_id && session.client_reference_id) {
             sub.metadata = { ...sub.metadata, supabase_user_id: session.client_reference_id };
           }
-          await syncSubscriptionRecord(sub);
+          result = await syncSubscriptionRecord(sub);
         }
         break;
       }
@@ -61,6 +76,15 @@ export default async function handler(req, res) {
         // Ignore unrelated events.
         break;
     }
+
+    // A DB write failure is transient — return 500 so Stripe retries and the
+    // subscription state can't permanently desync. "no-user" is NOT retriable
+    // (it will never resolve), so we ack it with 200 to stop the retries.
+    if (result && result.ok === false && result.reason === "db-error") {
+      console.error("[webhook] db write failed, asking Stripe to retry", event.type);
+      return res.status(500).json({ error: "db-write-failed" });
+    }
+
     return res.status(200).json({ received: true });
   } catch (e) {
     console.error("[webhook] handler error", e);

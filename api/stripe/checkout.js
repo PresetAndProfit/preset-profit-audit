@@ -36,6 +36,10 @@ export default async function handler(req, res) {
       .maybeSingle();
 
     let customerId = sub?.stripe_customer_id || null;
+    // Whether this customer has EVER had a subscription. Used to suppress the
+    // free trial on re-subscribe so a user can't cancel + re-subscribe for
+    // unlimited back-to-back free trials.
+    let hadPriorSubscription = false;
 
     // Migration-safe: a customer created in a different Stripe mode (e.g. a test
     // customer saved while testing) does not exist under the current (live) key,
@@ -67,6 +71,36 @@ export default async function handler(req, res) {
           { user_id: user.id, stripe_customer_id: customerId, updated_at: new Date().toISOString() },
           { onConflict: "user_id" }
         );
+    } else {
+      // Duplicate-subscription guard. If this customer already has a live
+      // subscription (active/trialing/past_due/incomplete), creating a second
+      // Checkout Session would create a SECOND subscription and bill the card
+      // twice. The correct path for an existing subscriber to change/cancel a
+      // plan is the Billing Portal, so send them there instead of double-charging.
+      const existingSubs = await stripe.subscriptions.list({
+        customer: customerId,
+        status: "all",
+        limit: 100,
+      });
+      // Any prior subscription (even canceled) means a trial was likely already
+      // consumed — don't grant another one on re-subscribe.
+      hadPriorSubscription = existingSubs.data.length > 0;
+      // Block only on subscriptions that represent a real, billable plan. An
+      // `incomplete` sub (abandoned/failed first payment, auto-expires in 24h) is
+      // intentionally excluded so the user can retry checkout.
+      const live = existingSubs.data.find((s) =>
+        ["active", "trialing", "past_due", "unpaid"].includes(s.status)
+      );
+      if (live) {
+        const portal = await stripe.billingPortal.sessions.create({
+          customer: customerId,
+          return_url: `${APP_URL}/?view=account`,
+        });
+        console.log("[checkout] existing subscription — routing to portal", {
+          userId: user.id, subscriptionId: live.id, status: live.status,
+        });
+        return res.status(200).json({ url: portal.url, alreadySubscribed: true });
+      }
     }
 
     // Server-side breadcrumb (Vercel logs). priceId / customerId are not secret.
@@ -82,7 +116,7 @@ export default async function handler(req, res) {
       client_reference_id: user.id,
       subscription_data: {
         metadata: { supabase_user_id: user.id },
-        ...(plan.trialDays ? { trial_period_days: plan.trialDays } : {}),
+        ...(plan.trialDays && !hadPriorSubscription ? { trial_period_days: plan.trialDays } : {}),
       },
       allow_promotion_codes: true,
       success_url: `${APP_URL}/?checkout=success&plan=${plan.id}`,

@@ -64,7 +64,7 @@ export const PLANS = {
     watermark: false,
     whiteLabel: true,
     shareLinks: true,
-    trialDays: 14,
+    trialDays: 0, // Agency is billed immediately — no free trial.
     blurb: "White-label audits for your clients.",
     features: [
       "Unlimited audits",
@@ -79,6 +79,31 @@ export const PLAN_ORDER = ["free", "professional", "agency"];
 
 export function getPlan(planId) {
   return PLANS[planId] || PLANS.free;
+}
+
+// Subscription statuses that actually grant the paid plan's entitlements.
+// `active`/`trialing` are clearly entitled. `past_due` is kept entitled as a
+// short dunning grace period (Stripe is retrying the card) — Stripe will move
+// the subscription to `canceled`/`unpaid` when retries are exhausted, at which
+// point the user drops to free. Everything else (canceled, incomplete,
+// incomplete_expired, unpaid, paused, …) grants NO paid entitlement.
+export const ENTITLED_STATUSES = new Set(["active", "trialing", "past_due"]);
+
+export function isEntitledStatus(status) {
+  // No status (legacy/free rows) is treated as entitled to its stored plan,
+  // which for free users is correctly the free plan.
+  return status == null || ENTITLED_STATUSES.has(status);
+}
+
+// The plan a subscription row ACTUALLY entitles the user to, accounting for
+// status. A paid plan whose subscription is canceled/incomplete/unpaid collapses
+// to free. This is the single source of truth for entitlement; the server-side
+// credit check (api/_lib/usageServer.js) and the client UI both use it so a
+// lapsed subscriber can never retain unlimited audits.
+export function effectivePlan(subscription) {
+  const planId = subscription?.plan || "free";
+  if (planId === "free") return PLANS.free;
+  return isEntitledStatus(subscription?.status) ? getPlan(planId) : PLANS.free;
 }
 
 // Start of the current usage window for a plan. Lifetime plans return the epoch

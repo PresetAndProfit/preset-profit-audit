@@ -6,7 +6,7 @@
 //
 // POST /api/audits/import  Body: { audits: [...] }  Header: Authorization: Bearer
 import { supabaseAdmin, getUserFromRequest } from "../_lib/supabaseAdmin.js";
-import { logUsageEvent } from "../_lib/usageServer.js";
+import { logUsageEvent, getUserPlan } from "../_lib/usageServer.js";
 
 const MAX_IMPORT = 25;
 
@@ -39,9 +39,16 @@ export default async function handler(req, res) {
       .eq("user_id", user.id);
     if (count && count > 0) return res.status(200).json({ ok: true, imported: 0, reason: "already-has-audits" });
 
+    // The import must respect the plan's audit limit — otherwise a brand-new
+    // FREE user (limit 1) could import up to MAX_IMPORT audits and bypass the
+    // credit cap entirely. Finite plans get min(limit, MAX_IMPORT); unlimited
+    // plans get MAX_IMPORT.
+    const { plan } = await getUserPlan(user.id);
+    const cap = plan.auditLimit == null ? MAX_IMPORT : Math.min(plan.auditLimit, MAX_IMPORT);
+
     const rows = incoming
       .filter((a) => a && a.id)
-      .slice(0, MAX_IMPORT)
+      .slice(0, cap)
       .map((a) => reportToRow(user.id, a));
 
     if (!rows.length) return res.status(200).json({ ok: true, imported: 0 });

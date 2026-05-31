@@ -3,16 +3,18 @@
 // so the only way to create an audit is through an endpoint that calls
 // assertCanCreateAudit() first.
 import { supabaseAdmin } from "./supabaseAdmin.js";
-import { getPlan, usageWindowStart } from "../../src/lib/plans.js";
+import { effectivePlan, usageWindowStart } from "../../src/lib/plans.js";
 
-// Resolve the user's plan object from their subscription row (defaults to free).
+// Resolve the user's ENTITLED plan object from their subscription row. Uses
+// effectivePlan() so a paid row whose subscription is canceled/incomplete/unpaid
+// collapses to free — a lapsed subscriber can never keep unlimited audits.
 export async function getUserPlan(userId) {
   const { data } = await supabaseAdmin
     .from("subscriptions")
     .select("plan, status, current_period_start")
     .eq("user_id", userId)
     .maybeSingle();
-  return { plan: getPlan(data?.plan), subscription: data || null };
+  return { plan: effectivePlan(data), subscription: data || null };
 }
 
 // Count audits the user has within the current plan window. Free = lifetime
@@ -42,6 +44,40 @@ export async function assertCanCreateAudit(userId) {
     return { ok: false, reason: "limit-reached", plan, used, limit: plan.auditLimit };
   }
   return { ok: true, plan, subscription, used };
+}
+
+// Close the check-then-insert race in audit creation. assertCanCreateAudit()
+// runs BEFORE the insert, so two concurrent requests can both pass it and both
+// insert, pushing a finite-plan user over the limit. After the row is written we
+// re-derive the set of audits that fit within the limit, ordered deterministically
+// (created_at, then client_id) so concurrent callers agree on the SAME winners.
+// If this client's row isn't in that set, we delete it and report over-limit.
+// Both racers compute identical winners, so exactly `auditLimit` rows survive.
+export async function enforceAuditLimitForClient(userId, clientId) {
+  const { plan, subscription } = await getUserPlan(userId);
+  if (plan.auditLimit == null) return { ok: true }; // unlimited
+
+  const since = usageWindowStart(plan, subscription?.current_period_start).toISOString();
+  const { data, error } = await supabaseAdmin
+    .from("audits")
+    .select("client_id, created_at")
+    .eq("user_id", userId)
+    .gte("created_at", since)
+    .order("created_at", { ascending: true })
+    .order("client_id", { ascending: true });
+
+  if (error) {
+    // Fail closed: drop the row we just wrote rather than grant a free credit.
+    console.error("[usageServer] enforceAuditLimitForClient read failed", error);
+    await supabaseAdmin.from("audits").delete().eq("user_id", userId).eq("client_id", String(clientId));
+    return { ok: false, limit: plan.auditLimit };
+  }
+
+  const winners = (data || []).slice(0, plan.auditLimit).map((r) => r.client_id);
+  if (winners.includes(String(clientId))) return { ok: true };
+
+  await supabaseAdmin.from("audits").delete().eq("user_id", userId).eq("client_id", String(clientId));
+  return { ok: false, limit: plan.auditLimit };
 }
 
 // Append an entry to the metering log (service-role; clients can't write here).

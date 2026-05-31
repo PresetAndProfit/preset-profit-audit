@@ -4,6 +4,7 @@ import { EFFORT_COLOR } from "../lib/constants.js";
 import { downloadReport } from "../lib/exportReport.js";
 import { calcROI } from "../lib/roiCalc.js";
 import AssumptionsEditor from "./AssumptionsEditor.jsx";
+import ConsultantReport from "./ConsultantReport.jsx";
 
 const TABS = ["overview", "findings", "what to fix", "30-day plan"];
 const PHASE_COLORS = ["#00d68f", "#f5a623", "#4a9eff"];
@@ -218,7 +219,11 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved, 
         </div>
       )}
 
-      {/* Executive summary */}
+      {/* Premium consultant report (V3, AI-generated) — sits above the detail tabs */}
+      {r.aiGenerated && <ConsultantReport r={r} />}
+
+      {/* Executive summary — deterministic fallback only (the consultant report has its own) */}
+      {!r.aiGenerated && (
       <div style={{ background: "var(--panel)", border: "1px solid rgba(245,166,35,0.25)", borderLeft: "3px solid var(--amber)", borderRadius: 8, padding: "16px 20px", marginBottom: 14 }}>
         <div style={{ fontSize: 10, color: "var(--amber)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>
           What This Means for {r.businessName}
@@ -230,6 +235,15 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved, 
           </p>
         )}
       </div>
+      )}
+
+      {r.aiGenerated && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 0 6px" }}>
+          <div style={{ height: 1, flex: 1, background: "var(--border)" }} />
+          <span style={{ fontSize: 11, color: "var(--muted)", letterSpacing: "0.16em", textTransform: "uppercase", fontFamily: "IBM Plex Mono" }}>Detailed breakdown</span>
+          <div style={{ height: 1, flex: 1, background: "var(--border)" }} />
+        </div>
+      )}
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: 2, marginBottom: 18, background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 8, padding: 4, width: "fit-content", flexWrap: "wrap" }}>

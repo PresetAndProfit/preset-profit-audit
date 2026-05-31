@@ -219,7 +219,11 @@ export function generateAudit(form, siteAnalysis = null) {
         detail: im.narrative,
         personalNote: f.observation,
         grounded: f.grounded,
-        impact: im,                           // {narrative, lostRevenueLow/High, revenueLabel, confidence}
+        // Legacy finding views (findings tab + PDF findingsPage) expect a STRING
+        // here. Surface the modeled range as the "Expected impact" line.
+        impact: im.lostRevenueHigh > 0
+          ? `Modeled opportunity: $${(im.lostRevenueLow || 0).toLocaleString()}–$${im.lostRevenueHigh.toLocaleString()}/mo`
+          : "",
       };
     });
     leadFindings    = sortF(mapped.filter(f => f.area === "leads"));

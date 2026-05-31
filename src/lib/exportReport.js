@@ -129,6 +129,7 @@ function summaryPage(r, brand) {
         </div>
       </div>
 
+      ${r.aiGenerated ? "" : `
       <!-- Executive summary text -->
       <div class="exec-box">
         <p class="exec-text">${esc(r.executiveSummary)}</p>
@@ -141,7 +142,7 @@ function summaryPage(r, brand) {
         <p class="rec-desc">${esc(r.recommendation?.description)}</p>
         ${r.recommendation?.benefit ? `<div class="rec-benefit"><span class="rec-benefit-icon">✓</span>${esc(r.recommendation.benefit)}</div>` : ""}
         <div class="rec-price">${esc(r.recommendation?.package)} · Starting from ${esc(r.recommendation?.price)}</div>
-      </div>
+      </div>`}
 
       <div class="page-footer">
         <span>${esc(r.businessName)} · Automation Opportunity Report · ${DATE_STR}</span>
@@ -377,6 +378,120 @@ function ctaPage(r) {
       <div class="cta-prepared">This report was prepared exclusively for ${esc(r.businessName)} by Preset &amp; Profit on ${DATE_STR}.</div>
     </div>
   </div>`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// V3 Consultant Report pages (mirror src/components/ConsultantReport.jsx)
+// Rendered only when r.aiGenerated. Inline-styled so they print without extra CSS.
+// ─────────────────────────────────────────────────────────────────────────────
+const usd = (n) => `$${Math.round(Number(n) || 0).toLocaleString()}`;
+const rng = (lo, hi) => `${usd(lo)}–${usd(hi)}/mo`;
+const tc = (s) => esc(String(s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()));
+const obsChip = (g) => `<span style="font-size:8.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:1px 6px;border-radius:4px;color:${g ? GREEN : MUTED};border:1px solid ${g ? GREEN : BORDER};background:${g ? "#eaf7f0" : SUBTLE}">${g ? "Observed" : "Best practice"}</span>`;
+const pill = (lo, hi) => `<span style="font-size:9.5px;font-weight:700;color:${GREEN};background:#eaf7f0;border:1px solid #b9e2cd;border-radius:20px;padding:2px 9px;white-space:nowrap">modeled opportunity: ${rng(lo, hi)}</span>`;
+const sColor = (s) => (s === "good" ? GREEN : s === "warn" ? AMBER : RED);
+
+function crSection(eyebrow, heading, inner) {
+  return `<div class="page interior cr"><div class="page-spine"></div><div class="page-content">
+    <div class="section-eyebrow">${esc(eyebrow)}</div>
+    <h2 class="section-heading">${esc(heading)}</h2>
+    ${inner}
+    <div class="page-footer"><span>Consultant Report</span><span></span></div>
+  </div></div>`;
+}
+
+function consultantPages(r) {
+  if (!r.aiGenerated) return "";
+  const bi = r.businessIntelligence, brief = r.executiveBrief;
+  const leaks = Array.isArray(r.revenueLeaks) ? r.revenueLeaks : [];
+  const ls = r.revenueLeakSummary, bench = r.competitiveBenchmark, mx = r.priorityMatrix;
+  const autos = (r.automationPlan?.automations || []).slice().sort((a, b) => (a.sequencePriority || 0) - (b.sequencePriority || 0));
+  const road = r.implementationRoadmap?.items || [];
+  let out = "";
+
+  // 1 — Executive summary
+  const paras = String(r.executiveSummary || "").split(/\n\s*\n/).filter(Boolean).map((p) => `<p class="exec-text">${esc(p)}</p>`).join("");
+  let exInner = brief?.headline ? `<p style="font-family:'Fraunces',serif;font-size:15px;font-weight:600;line-height:1.5;border-left:3px solid ${GOLD};padding-left:14px;margin:0 0 12px">${esc(brief.headline)}</p>` : "";
+  exInner += `<div class="exec-box">${paras}</div>`;
+  if (brief?.priorityAction) {
+    exInner += `<div style="background:${SUBTLE};border:1px solid ${BORDER};border-radius:8px;padding:12px 16px;margin-top:12px">
+      <div style="font-size:10px;color:${GOLD2};text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px">Do this first</div>
+      <div style="font-weight:700;font-size:13px">${esc(brief.priorityAction.action)}</div>
+      <div style="font-size:12px;color:${MUTED};margin:4px 0 8px;line-height:1.5">${esc(brief.priorityAction.rationale)}</div>
+      <ol style="margin:0;padding-left:18px;font-size:12px;line-height:1.7">${(brief.priorityAction.sequence || []).map((s) => `<li>${esc(s)}</li>`).join("")}</ol>
+      ${brief.modeledOpportunity?.high != null ? `<div style="margin-top:10px">${pill(brief.modeledOpportunity.low, brief.modeledOpportunity.high)}</div>` : ""}
+    </div>`;
+  }
+  out += crSection("CONSULTANT REPORT — EXECUTIVE SUMMARY", `What this means for ${r.businessName}`, exInner);
+
+  // 2 — Business intelligence
+  if (bi) {
+    const fields = [["Revenue Model", bi.revenueModel], ["Revenue Sources", bi.revenueSources], ["Customer Acquisition", bi.acquisitionChannels], ["Geographic Market", bi.geographicMarket], ["Primary Conversion", bi.primaryConversion], ["Secondary Conversions", bi.secondaryConversions], ["Service Model", bi.serviceModel], ["Online / Offline Mix", bi.onlineOfflineMix]]
+      .filter(([, v]) => v && v.value != null && (!Array.isArray(v.value) || v.value.length));
+    const cards = fields.map(([label, inf]) => `<div style="background:${SUBTLE};border:1px solid ${BORDER};border-radius:8px;padding:11px 14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:9.5px;color:${MUTED};text-transform:uppercase;letter-spacing:.07em">${esc(label)}</span>${obsChip(inf.basis === "observed")}</div>
+      <div style="font-size:12.5px;font-weight:600;color:${INK}">${Array.isArray(inf.value) ? inf.value.map((v) => `<span style="display:inline-block;background:${WHITE};border:1px solid ${BORDER};border-radius:12px;padding:1px 8px;margin:2px 3px 0 0;font-weight:500">${tc(v)}</span>`).join("") : tc(inf.value)}</div>
+    </div>`).join("");
+    const conf = typeof (bi.businessType?.confidence) === "number" ? ` <span style="font-size:11px;color:${GREEN}">· confidence ${Math.round(bi.businessType.confidence * 100)}%</span>` : "";
+    out += crSection("BUSINESS INTELLIGENCE PROFILE", `${bi.businessType?.label || r.detectedBusinessType?.label || "Business profile"}`, `<div style="font-size:11px;color:${MUTED};margin:-8px 0 12px">${conf}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${cards}</div>`);
+  }
+
+  // 3 — Revenue leaks
+  if (ls) {
+    const cards = leaks.map((lk) => `<div style="border:1px solid ${sColor(lk.status)}33;border-left:3px solid ${sColor(lk.status)};border-radius:8px;padding:11px 15px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div style="font-size:13px;font-weight:700">${esc(lk.title)}</div>${pill(lk.recovery?.low, lk.recovery?.high)}</div>
+      <div style="font-size:11.5px;color:${MUTED};line-height:1.55;margin:6px 0">${esc(lk.whatsMissing)}</div>
+      <div style="margin-bottom:6px">${obsChip(lk.grounded)} <span style="font-size:8.5px;color:${MUTED};border:1px solid ${BORDER};border-radius:4px;padding:1px 6px;text-transform:uppercase">volume: ${lk.volumeLeverObserved ? "observed" : "assumed"}</span></div>
+      <div style="font-size:11.5px;line-height:1.55"><b style="color:${GOLD2}">Recommendation:</b> ${esc(lk.recommendation)}</div>
+    </div>`).join("");
+    out += crSection("REVENUE LEAK ANALYSIS", "Where money may be leaking", `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;background:#eaf7f0;border:1px solid #b9e2cd;border-radius:8px;padding:11px 15px;margin-bottom:12px"><span style="font-size:12px;line-height:1.5">${esc(ls.headline)}</span>${pill(ls.totalLow, ls.totalHigh)}</div>${cards}<div style="font-size:10px;color:${MUTED};margin-top:8px">${esc(ls.method)}</div>`);
+  }
+
+  // 4 — Competitive benchmark
+  if (bench?.dimensions?.length) {
+    const rows = bench.dimensions.map((d) => {
+      const gc = d.gap?.status === "ahead" ? GREEN : d.gap?.status === "behind" ? RED : MUTED;
+      const unknown = d.yours?.state === "unknown";
+      return `<tr style="border-top:1px solid ${BORDER}"><td style="padding:7px 8px;font-weight:600">${esc(d.label)}</td><td style="padding:7px 8px;color:${unknown ? MUTED : INK}">${unknown ? "Not verified" : esc(d.yours?.value)}</td><td style="padding:7px 8px;color:${MUTED}">${esc(d.industryAverage?.value)}</td><td style="padding:7px 8px;color:${gc}">${d.gap?.status === "behind" ? "▼ " : d.gap?.status === "ahead" ? "▲ " : "• "}${esc(d.gap?.summary)}</td></tr>`;
+    }).join("");
+    out += crSection("COMPETITIVE BENCHMARK", `${r.businessName} vs. industry norms`, `<p style="font-size:12px;color:${MUTED};line-height:1.6;margin-bottom:10px">${esc(bench.summary)}</p><table style="width:100%;border-collapse:collapse;font-size:11.5px"><thead><tr style="text-align:left;color:${MUTED};font-size:9.5px;text-transform:uppercase"><th style="padding:6px 8px">Dimension</th><th style="padding:6px 8px">Your Business</th><th style="padding:6px 8px">Industry Average</th><th style="padding:6px 8px">Gap</th></tr></thead><tbody>${rows}</tbody></table><div style="font-size:10px;color:${MUTED};margin-top:8px">${esc(bench.benchmarkBasis)}</div>`);
+  }
+
+  // 5 — Priority matrix
+  if (mx?.items?.length) {
+    const buckets = [["Quick Wins", "quick_win", GREEN], ["Strategic Improvements", "strategic_improvement", AMBER], ["Long-Term", "long_term_opportunity", "#4a6fa5"]].map(([label, key, col]) => {
+      const ids = (mx.buckets?.[key]) || [];
+      const items = ids.map((id) => { const it = mx.items.find((x) => x.findingId === id); return it ? `<div style="font-size:11px;line-height:1.4;margin-bottom:3px">• ${esc(it.title)}</div>` : ""; }).join("") || `<div style="font-size:11px;color:${MUTED}">—</div>`;
+      return `<div style="background:${SUBTLE};border:1px solid ${col}44;border-top:2px solid ${col};border-radius:8px;padding:10px 12px"><div style="font-size:9.5px;color:${col};text-transform:uppercase;letter-spacing:.07em;font-weight:700;margin-bottom:6px">${label}</div>${items}</div>`;
+    }).join("");
+    const rows = mx.items.slice().sort((a, b) => (a.rank || 99) - (b.rank || 99)).map((it) => `<div style="display:flex;align-items:center;gap:10px;font-size:11.5px;padding:5px 0;border-bottom:1px solid ${BORDER}"><span style="width:16px;color:${MUTED}">${it.rank}</span><span style="flex:1">${esc(it.title)}</span><span style="font-size:9.5px;color:${MUTED}">impact ${it.impact} · effort ${it.effort}</span><span style="font-size:9.5px;color:${sColor(it.status)};border:1px solid ${sColor(it.status)};border-radius:4px;padding:1px 6px">${esc(it.priority)}</span></div>`).join("");
+    out += crSection("PRIORITY MATRIX", "What to do, in order of return", `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">${buckets}</div>${rows}<div style="font-size:10px;color:${MUTED};margin-top:8px">${esc(mx.methodology)}</div>`);
+  }
+
+  // 6 — Automations
+  if (autos.length) {
+    const cards = autos.map((a) => `<div style="border:1px solid ${BORDER};border-radius:8px;padding:11px 15px;margin-bottom:10px">
+      <div style="margin-bottom:5px"><span style="font-size:10.5px;color:${MUTED}">Step ${a.sequencePriority}</span> ${a.canonicalService ? `<span style="font-size:9.5px;color:${GOLD2};border:1px solid ${GOLD}66;border-radius:4px;padding:1px 6px">${esc(a.canonicalService)}</span>` : ""} ${obsChip(a.grounded)}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:11.5px;line-height:1.5"><div><b style="color:${RED}">Problem:</b> ${esc(a.problem)}</div><div><b style="color:${GREEN}">Automation:</b> ${esc(a.automation)}</div></div>
+      <div style="font-size:11.5px;color:${MUTED};line-height:1.5;margin-top:5px">${esc(a.howItWorks)}</div>
+      <div style="margin-top:7px">${a.timeSaved?.hoursPerWeek ? `<span style="font-size:10.5px;color:#4a6fa5">saves ~${a.timeSaved.hoursPerWeek} hrs/week</span> ` : ""}${a.businessImpact?.modeledMonthlyHigh > 0 ? pill(a.businessImpact.modeledMonthlyLow, a.businessImpact.modeledMonthlyHigh) : ""}</div>
+    </div>`).join("");
+    out += crSection("AUTOMATION OPPORTUNITIES", "Systems that fix the gaps automatically", (r.automationPlan?.sequenceRationale ? `<p style="font-size:12px;color:${MUTED};line-height:1.6;margin-bottom:10px">${esc(r.automationPlan.sequenceRationale)}</p>` : "") + cards);
+  }
+
+  // 7 — Roadmap
+  if (road.length) {
+    const phases = ["now", "next", "later"].map((ph) => {
+      const items = road.filter((i) => i.priority === ph).sort((a, b) => (a.priorityRank || 0) - (b.priorityRank || 0));
+      if (!items.length) return "";
+      const col = ph === "now" ? GREEN : ph === "next" ? AMBER : "#4a6fa5";
+      const cards = items.map((it) => `<div style="border-left:3px solid ${col};background:${SUBTLE};border-radius:6px;padding:9px 14px;margin-bottom:7px"><div style="font-size:12.5px;font-weight:700;margin-bottom:3px">${esc(it.issue)} ${obsChip(it.grounded)} ${it.presetProfitCanDeploy ? `<span style="font-size:9px;color:${GREEN};border:1px solid #b9e2cd;border-radius:4px;padding:1px 6px">Preset &amp; Profit can deploy</span>` : ""}</div><div style="font-size:11.5px;line-height:1.5">${esc(it.recommendedFix)}</div>${it.automationName ? `<div style="font-size:10.5px;color:${GOLD2};margin-top:3px">↳ ${esc(it.automationName)}</div>` : ""}</div>`).join("");
+      return `<div style="margin-bottom:10px"><div style="font-size:10.5px;color:${col};text-transform:uppercase;letter-spacing:.1em;font-weight:700;margin-bottom:6px">${ph}</div>${cards}</div>`;
+    }).join("");
+    out += crSection("IMPLEMENTATION ROADMAP", "The plan, sequenced", phases);
+  }
+
+  return out;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -849,6 +964,7 @@ export function buildHTML(r, { branding = null, watermark = false } = {}) {
 </div>
 
 ${coverPage(r, brand)}
+${consultantPages(r)}
 ${summaryPage(r, brand)}
 ${findingsPage(r, brand)}
 ${revenueOpportunitiesPage(r, brand)}

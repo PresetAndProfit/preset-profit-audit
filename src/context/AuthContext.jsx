@@ -21,12 +21,21 @@ export function AuthProvider({ children }) {
       setSubscription(null);
       return;
     }
-    const [{ data: prof }, { data: sub }] = await Promise.all([
-      supabase.from("profiles").select("*").eq("id", uid).maybeSingle(),
-      supabase.from("subscriptions").select("*").eq("user_id", uid).maybeSingle(),
-    ]);
-    setProfile(prof ?? null);
-    setSubscription(sub ?? null);
+    // Never let a failed/slow fetch reject — the caller gates the app's loading
+    // state on this, so a throw here would otherwise hang the whole app on the
+    // loading spinner. Degrade to nulls (plan falls back to free) instead.
+    try {
+      const [{ data: prof }, { data: sub }] = await Promise.all([
+        supabase.from("profiles").select("*").eq("id", uid).maybeSingle(),
+        supabase.from("subscriptions").select("*").eq("user_id", uid).maybeSingle(),
+      ]);
+      setProfile(prof ?? null);
+      setSubscription(sub ?? null);
+    } catch (e) {
+      console.error("[auth] loadAccount failed", e);
+      setProfile(null);
+      setSubscription(null);
+    }
   }, []);
 
   useEffect(() => {
@@ -35,9 +44,14 @@ export function AuthProvider({ children }) {
     supabase.auth.getSession().then(async ({ data }) => {
       if (!active) return;
       setSession(data.session ?? null);
-      await loadAccount(data.session?.user?.id);
-      if (active) setLoading(false);
-    });
+      // finally guarantees the loading gate clears even if loadAccount throws,
+      // so the app can never get stuck on the loading spinner after login.
+      try {
+        await loadAccount(data.session?.user?.id);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }).catch(() => { if (active) setLoading(false); });
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession ?? null);

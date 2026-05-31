@@ -7,6 +7,7 @@ import ResetPassword from "./components/auth/ResetPassword.jsx";
 import SharedReport from "./components/SharedReport.jsx";
 import LegalPage from "./components/legal/LegalPage.jsx";
 import AppShell from "./components/AppShell.jsx";
+import ErrorBoundary from "./components/ErrorBoundary.jsx";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Router root. Public auth routes are open; everything under "/*" requires a
@@ -16,6 +17,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <ErrorBoundary>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
@@ -34,6 +36,7 @@ export default function App() {
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </ErrorBoundary>
       </AuthProvider>
     </BrowserRouter>
   );

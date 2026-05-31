@@ -12,7 +12,14 @@ export const stripe = new Stripe(secret || "sk_test_missing", {
   // Pin nothing here on purpose — use the account's default API version so a
   // dashboard upgrade doesn't require a code change. Pin later if needed.
   appInfo: { name: "Preset & Profit" },
+  // Fail fast on transport errors instead of masking them behind retries, so
+  // the real connectivity failure surfaces immediately.
+  maxNetworkRetries: 0,
+  timeout: 20000,
 });
+
+// SDK version for diagnostics (logged by the checkout endpoint).
+export const STRIPE_SDK_VERSION = Stripe.PACKAGE_VERSION || "unknown";
 
 // Map our internal plan id → the Stripe Price ID (from env). Single source of
 // truth for both directions so checkout and webhook agree.

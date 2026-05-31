@@ -1,6 +1,6 @@
 // api/stripe/checkout.js — create a Stripe Checkout Session for a paid plan.
 // Auth required (Bearer access token). Returns { url } for the client to redirect to.
-import { stripe, priceIdForPlan } from "../_lib/stripe.js";
+import { stripe, priceIdForPlan, STRIPE_SDK_VERSION } from "../_lib/stripe.js";
 import { supabaseAdmin, getUserFromRequest } from "../_lib/supabaseAdmin.js";
 import { getPlan } from "../../src/lib/plans.js";
 
@@ -26,6 +26,31 @@ export default async function handler(req, res) {
 
   const priceId = priceIdForPlan(plan.id);
   if (!priceId) return res.status(500).json({ error: "price-not-configured", plan: plan.id });
+
+  // Runtime + SDK breadcrumb. `edge` must be false — Stripe's Node HTTP client
+  // does not work on the Edge runtime and would cause connection errors.
+  console.log("[checkout] runtime", {
+    node: process.version,
+    edge: typeof globalThis.EdgeRuntime !== "undefined",
+    stripeSdk: STRIPE_SDK_VERSION,
+    region: process.env.VERCEL_REGION || null,
+  });
+
+  // Connectivity preflight: a lightweight GET to Stripe. If the network/transport
+  // is the problem (StripeConnectionError), it fails HERE with the exact error,
+  // isolating transport issues from the checkout-session payload.
+  try {
+    await stripe.prices.retrieve(priceId);
+  } catch (e) {
+    const info = {
+      type: e?.type || e?.name || "Error",
+      code: e?.code || null,
+      message: e?.message || String(e),
+      requestId: e?.requestId || null,
+    };
+    console.error("[checkout] stripe connectivity/price preflight failed", info);
+    return res.status(502).json({ error: "stripe-unreachable", stripe: info });
+  }
 
   try {
     // Reuse the Stripe customer if we've already created one for this user.

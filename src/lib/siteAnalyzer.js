@@ -393,19 +393,32 @@ async function fetchOnce(url, timeoutMs = 9000) {
   }
 }
 
-export async function scanSite(rawUrl) {
+// `fetchPage` is injected by the server callers (api/analyze-site.js and the
+// Vite dev middleware) as the SSRF-guarded safeFetchPage. It defaults to the
+// plain fetchOnce only so the function stays runnable in isolation/tests — in
+// production the guarded fetcher is ALWAYS supplied.
+export async function scanSite(rawUrl, { fetchPage = fetchOnce } = {}) {
   const requestedUrl = normalizeUrl(rawUrl);
   if (!requestedUrl) return { ok: false, error: "invalid-url", requestedUrl: rawUrl || null };
 
   let resp;
   try {
-    resp = await fetchOnce(requestedUrl);
+    resp = await fetchPage(requestedUrl);
   } catch (e1) {
+    // A blocked private address is a hard stop — never fall back or retry it.
+    if (String(e1?.message || e1).startsWith("ssrf-blocked")) {
+      return { ok: false, error: "blocked-url", requestedUrl };
+    }
     // https failed — try http:// once (the site may not support TLS)
     const httpUrl = requestedUrl.replace(/^https:\/\//i, "http://");
     if (httpUrl !== requestedUrl) {
-      try { resp = await fetchOnce(httpUrl); }
-      catch (e2) { return { ok: false, error: "unreachable", detail: String(e2), requestedUrl }; }
+      try { resp = await fetchPage(httpUrl); }
+      catch (e2) {
+        if (String(e2?.message || e2).startsWith("ssrf-blocked")) {
+          return { ok: false, error: "blocked-url", requestedUrl };
+        }
+        return { ok: false, error: "unreachable", detail: String(e2), requestedUrl };
+      }
     } else {
       return { ok: false, error: "unreachable", detail: String(e1), requestedUrl };
     }

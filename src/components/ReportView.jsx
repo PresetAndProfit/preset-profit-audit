@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { ScoreRing, Tag, Btn } from "./ui/index.jsx";
-import { STATUS_COLORS, EFFORT_COLOR, CONF_COLOR } from "../lib/constants.js";
+import { EFFORT_COLOR } from "../lib/constants.js";
 import { downloadReport } from "../lib/exportReport.js";
 import { calcROI } from "../lib/roiCalc.js";
 import AssumptionsEditor from "./AssumptionsEditor.jsx";
@@ -60,10 +60,16 @@ const findingIcon  = s => s === "good" ? "✓" : s === "warn" ? "⚠" : "✗";
 const findingColor = s => s === "good" ? "var(--green)" : s === "warn" ? "var(--amber)" : "var(--red)";
 const findingBorder = s => s === "good" ? "rgba(0,214,143,0.2)" : s === "warn" ? "rgba(245,166,35,0.2)" : "rgba(255,71,87,0.2)";
 
-export default function ReportView({ report: r, onBack, onSave, isAlreadySaved }) {
+// branding: { name, logoUrl, color } | null  (Agency white-label)
+// shared:   true when rendered on a public /r/:token page (read-only, no agency CTAs)
+// watermark: true for the free tier (stamps the PDF + shows a banner)
+// onShare:  async () => url   (Agency share-link generator)
+export default function ReportView({ report: r, onBack, onSave, isAlreadySaved, branding = null, shared = false, watermark = false, onShare = null }) {
   const [tab, setTab]     = useState("overview");
   const [saved, setSaved] = useState(!!isAlreadySaved);
   const [sent, setSent]   = useState(false);
+  const [shareUrl, setShareUrl] = useState("");
+  const [sharing, setSharing]   = useState(false);
 
   // ── Live assumptions state — starts from benchmark, user can adjust ───────
   const [adj, setAdj] = useState({
@@ -115,8 +121,22 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved }
   const handleSave = () => { onSave(r); setSaved(true); };
 
   const sendToClient = () => {
-    downloadReport(r);
+    downloadReport(r, { branding, watermark });
     setSent(true);
+  };
+
+  const handleShare = async () => {
+    if (!onShare) return;
+    setSharing(true);
+    try {
+      const url = await onShare(r);
+      if (url) {
+        setShareUrl(url);
+        try { await navigator.clipboard.writeText(url); } catch { /* clipboard may be blocked */ }
+      }
+    } finally {
+      setSharing(false);
+    }
   };
 
   // Total hours saved (for sticky bar)
@@ -128,10 +148,27 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved }
   return (
     <>
     <div className="page-pad" style={{ animation: "fadeUp .4s ease", paddingBottom: 100 }}>
+      {/* White-label brand bar (Agency) */}
+      {branding && (branding.name || branding.logoUrl) && (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0 16px", marginBottom: 14, borderBottom: `2px solid ${branding.color || "var(--amber)"}` }}>
+          {branding.logoUrl
+            ? <img src={branding.logoUrl} alt={branding.name || "logo"} style={{ height: 30, maxWidth: 160, objectFit: "contain" }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
+            : <div style={{ width: 28, height: 28, borderRadius: 6, background: branding.color || "var(--amber)" }} />}
+          {branding.name && <span style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 16, color: "var(--text)" }}>{branding.name}</span>}
+        </div>
+      )}
+
+      {/* Free-tier watermark banner */}
+      {watermark && !shared && (
+        <div style={{ background: "rgba(245,166,35,0.1)", border: "1px dashed var(--amber)", borderRadius: 8, padding: "10px 14px", marginBottom: 14, fontSize: 12, color: "var(--amber)" }}>
+          Free preview — the exported PDF is watermarked. Upgrade to Professional for clean, un-watermarked reports.
+        </div>
+      )}
+
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12, marginBottom: 22 }}>
         <div>
-          <button onClick={onBack} style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 12, marginBottom: 8, fontFamily: "IBM Plex Mono" }}>← Back to Dashboard</button>
+          {!shared && <button onClick={onBack} style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 12, marginBottom: 8, fontFamily: "IBM Plex Mono" }}>← Back to Dashboard</button>}
           <h1 style={{ fontFamily: "Syne", fontSize: 22, fontWeight: 800, letterSpacing: "-0.01em" }}>{r.businessName}</h1>
           <div style={{ fontSize: 11, color: "var(--amber)", letterSpacing: "0.08em", textTransform: "uppercase", marginTop: 4 }}>
             Automation Opportunity Report{r.createdAt ? ` · Prepared ${new Date(r.createdAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}` : ""}
@@ -145,11 +182,22 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved }
             {r.goal && <Tag color="var(--amber)">{r.goal}</Tag>}
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <Btn onClick={handleSave} variant={saved ? "success" : "ghost"}>{saved ? "✓ Saved" : "Save Report"}</Btn>
-          <Btn onClick={sendToClient} variant={sent ? "success" : "primary"}>{sent ? "✓ PDF Ready" : "↓ Download PDF Report"}</Btn>
-        </div>
+        {!shared && (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Btn onClick={handleSave} variant={saved ? "success" : "ghost"}>{saved ? "✓ Saved" : "Save Report"}</Btn>
+            {onShare && <Btn onClick={handleShare} variant="ghost" disabled={sharing}>{sharing ? "Creating…" : shareUrl ? "✓ Link copied" : "🔗 Share link"}</Btn>}
+            <Btn onClick={sendToClient} variant={sent ? "success" : "primary"}>{sent ? "✓ PDF Ready" : "↓ Download PDF Report"}</Btn>
+          </div>
+        )}
       </div>
+
+      {/* Share URL surface (Agency) */}
+      {shareUrl && !shared && (
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, padding: "10px 14px", marginBottom: 14, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, color: "var(--green)" }}>Public link (copied):</span>
+          <a href={shareUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "var(--amber)", fontFamily: "IBM Plex Mono", wordBreak: "break-all" }}>{shareUrl}</a>
+        </div>
+      )}
 
       {/* Score row */}
       <div className="stats-grid" style={{ gridTemplateColumns: "repeat(4,1fr)" }}>
@@ -257,12 +305,14 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved }
 
             {/* Cost vs return — the math visible on one screen */}
             <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-              <div style={{ flex: 1, minWidth: 190, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, padding: "12px 16px" }}>
-                <div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>Starting from</div>
-                <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 24, color: "var(--text)" }}>{r.recommendation?.price}</div>
-                <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>one-time setup · no ongoing contract</div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", fontSize: 20, color: "var(--amber)", fontWeight: 700 }}>→</div>
+              {!shared && (
+                <div style={{ flex: 1, minWidth: 190, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, padding: "12px 16px" }}>
+                  <div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>Starting from</div>
+                  <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 24, color: "var(--text)" }}>{r.recommendation?.price}</div>
+                  <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>one-time setup · no ongoing contract</div>
+                </div>
+              )}
+              {!shared && <div style={{ display: "flex", alignItems: "center", fontSize: 20, color: "var(--amber)", fontWeight: 700 }}>→</div>}
               <div style={{ flex: 1, minWidth: 190, background: "rgba(0,214,143,0.06)", border: "1px solid rgba(0,214,143,0.25)", borderRadius: 8, padding: "12px 16px" }}>
                 <div style={{ fontSize: 10, color: "var(--green)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>Extra revenue</div>
                 <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 24, color: "var(--green)" }}>{liveTotalMonthly}</div>
@@ -270,7 +320,7 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved }
               </div>
             </div>
 
-            <BookCallBlock monthly={liveTotalMonthly} />
+            {!shared && <BookCallBlock monthly={liveTotalMonthly} />}
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
@@ -460,7 +510,7 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved }
               </div>
             </div>
           ))}
-          <div style={{ background: "var(--panel)", border: "1px solid rgba(245,166,35,0.4)", borderRadius: 10, padding: "28px 24px", textAlign: "center" }}>
+          {!shared && <div style={{ background: "var(--panel)", border: "1px solid rgba(245,166,35,0.4)", borderRadius: 10, padding: "28px 24px", textAlign: "center" }}>
             <div style={{ fontFamily: "Syne", fontSize: 18, fontWeight: 800, marginBottom: 8 }}>Want us to set this up for {r.businessName}?</div>
             <p style={{ color: "var(--muted)", fontSize: 13, lineHeight: 1.7, maxWidth: 480, margin: "0 auto 8px" }}>We handle the full setup — usually done within 7 days. You don't need any tech skills or extra staff.</p>
             <p style={{ color: "var(--muted)", fontSize: 13, lineHeight: 1.7, maxWidth: 480, margin: "0 auto 20px" }}>On the call we'll walk through exactly which systems make sense for your business and give you a clear price — no surprises.</p>
@@ -470,7 +520,7 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved }
             <button onClick={sendToClient} style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 11, marginTop: 14, textDecoration: "underline" }}>
               {sent ? "✓ Report downloaded" : "Prefer to read it later? Download the report →"}
             </button>
-          </div>
+          </div>}
         </div>
       )}
       {/* Footnote disclaimer — quiet, at bottom */}
@@ -479,8 +529,8 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved }
       </div>
     </div>
 
-    {/* ── Sticky bottom CTA bar — visible on every tab ── */}
-    <div style={{
+    {/* ── Sticky bottom CTA bar — visible on every tab (owner view only) ── */}
+    {!shared && <div style={{
       position: "sticky", bottom: 0, zIndex: 15,
       background: "linear-gradient(135deg, #111118 0%, #16161f 100%)",
       borderTop: "1px solid rgba(245,166,35,0.35)",
@@ -517,7 +567,7 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved }
           Free · No obligation · Exact pricing on the call
         </div>
       </div>
-    </div>
+    </div>}
     </>
   );
 }

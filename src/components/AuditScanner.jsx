@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Field, Select } from "./ui/index.jsx";
 import { INDUSTRIES, GOALS } from "../lib/constants.js";
 import { generateAudit } from "../lib/auditEngine.js";
+import { authedFetch } from "../lib/api.js";
 
 const PHASES = [
   "Initialising audit engine…",
@@ -42,11 +43,8 @@ export default function AuditScanner({ onComplete, onScanStart, onScanEnd }) {
     // so the analysis happens while the phases play out.
     const trimmedUrl = form.url.trim();
     const scanPromise = trimmedUrl
-      ? fetch("/api/analyze-site", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: trimmedUrl }),
-        }).then(r => r.json()).catch(() => null)
+      ? authedFetch("/api/analyze-site", { body: { url: trimmedUrl } })
+          .then(r => r.json()).catch(() => null)
       : Promise.resolve(null);
 
     for (let i = 0; i < PHASES.length; i++) {
@@ -55,7 +53,7 @@ export default function AuditScanner({ onComplete, onScanStart, onScanEnd }) {
       await new Promise(r => setTimeout(r, 480));
     }
 
-    let siteAnalysis = null;
+    let siteAnalysis;
     try { siteAnalysis = await scanPromise; } catch { siteAnalysis = null; }
     if (trimmedUrl && siteAnalysis?.ok) {
       addLog(`✓ Read your live site: ${siteAnalysis.signals?.finalUrl || trimmedUrl}`);

@@ -1,40 +1,68 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// Dev-only middleware so POST /api/analyze-site works under `npm run dev`,
-// using the exact same scanSite() code path as the Vercel serverless function.
+// Dev-only middleware that mounts the Vercel serverless functions under
+// `npm run dev`, so the full auth + SSRF + rate-limit + Stripe flows work
+// locally without `vercel dev`. Each route loads the SAME handler file Vercel
+// runs in production via ssrLoadModule. JSON routes get a parsed req.body and a
+// Vercel-style res.status().json() shim; the Stripe webhook is left as a raw
+// stream so its handler can verify the signature against the exact bytes.
 function devApiPlugin() {
+  const ROUTES = [
+    { path: '/api/analyze-site',   mod: '/api/analyze-site.js',   parse: true },
+    { path: '/api/audits/create',  mod: '/api/audits/create.js',  parse: true },
+    { path: '/api/audits/import',  mod: '/api/audits/import.js',  parse: true },
+    { path: '/api/admin/usage',    mod: '/api/admin/usage.js',    parse: true },
+    { path: '/api/share/create',   mod: '/api/share/create.js',   parse: true },
+    { path: '/api/share/get',      mod: '/api/share/get.js',      parse: true },
+    { path: '/api/stripe/checkout', mod: '/api/stripe/checkout.js', parse: true },
+    { path: '/api/stripe/portal',   mod: '/api/stripe/portal.js',   parse: true },
+    { path: '/api/stripe/sync',     mod: '/api/stripe/sync.js',     parse: true },
+    { path: '/api/stripe/webhook',  mod: '/api/stripe/webhook.js',  parse: false },
+  ]
   return {
-    name: 'dev-analyze-site-api',
+    name: 'dev-api',
     configureServer(server) {
-      server.middlewares.use('/api/analyze-site', async (req, res, next) => {
-        if (req.method !== 'POST') return next()
-        try {
-          const { scanSite } = await server.ssrLoadModule('/src/lib/siteAnalyzer.js')
-          let body = ''
-          for await (const chunk of req) body += chunk
-          let url
-          try { url = JSON.parse(body || '{}').url } catch { url = undefined }
-          if (!url) {
-            res.statusCode = 400
+      for (const route of ROUTES) {
+        server.middlewares.use(route.path, async (req, res, next) => {
+          if (req.method !== 'POST' && req.method !== 'GET') return next()
+          // Adapt the raw Node res to the Vercel-style res.status().json() API.
+          res.status = (code) => { res.statusCode = code; return res }
+          res.json = (obj) => {
             res.setHeader('Content-Type', 'application/json')
-            return res.end(JSON.stringify({ ok: false, error: 'missing-url' }))
+            res.end(JSON.stringify(obj))
+            return res
           }
-          const result = await scanSite(url)
-          res.statusCode = 200
-          res.setHeader('Content-Type', 'application/json')
-          res.end(JSON.stringify(result))
-        } catch (e) {
-          res.statusCode = 200
-          res.setHeader('Content-Type', 'application/json')
-          res.end(JSON.stringify({ ok: false, error: 'scan-failed', detail: String(e) }))
-        }
-      })
+          try {
+            if (route.parse && req.method === 'POST') {
+              let body = ''
+              for await (const chunk of req) body += chunk
+              try { req.body = JSON.parse(body || '{}') } catch { req.body = {} }
+            }
+            const { default: handler } = await server.ssrLoadModule(route.mod)
+            await handler(req, res)
+          } catch (e) {
+            if (!res.writableEnded) {
+              res.statusCode = 500
+              res.setHeader('Content-Type', 'application/json')
+              res.end(JSON.stringify({ error: 'dev-handler-failed', detail: String(e?.message || e) }))
+            }
+          }
+        })
+      }
     },
   }
 }
 
 // https://vite.dev/config/
-export default defineConfig({
-  plugins: [react(), devApiPlugin()],
+export default defineConfig(({ mode }) => {
+  // Load ALL env vars (not just VITE_*) into process.env so the dev API
+  // middleware can read server-only secrets from .env.local. This does NOT
+  // expose them to the client bundle — only VITE_* reach import.meta.env.
+  const env = loadEnv(mode, process.cwd(), '')
+  Object.assign(process.env, env)
+
+  return {
+    plugins: [react(), devApiPlugin()],
+  }
 })

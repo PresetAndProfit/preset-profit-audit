@@ -18,4 +18,12 @@ export default defineConfig([
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
   },
+  {
+    // Server-side serverless functions and build/setup scripts run in Node,
+    // not the browser — give them Node globals (process, Buffer, …) and don't
+    // apply the React Fast-Refresh component-export rule to them.
+    files: ['api/**/*.js', 'scripts/**/*.js', '*.config.js'],
+    languageOptions: { globals: globals.node },
+    rules: { 'react-refresh/only-export-components': 'off' },
+  },
 ])

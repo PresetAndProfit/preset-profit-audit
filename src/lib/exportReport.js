@@ -58,14 +58,17 @@ const DATE_STR = new Date().toLocaleDateString("en-US", { year:"numeric", month:
 // PAGE BUILDERS
 // ─────────────────────────────────────────────────────────────────────────────
 
-function coverPage(r) {
+function coverPage(r, brand) {
+  const mark = brand.whiteLabel
+    ? (brand.logoUrl
+        ? `<img src="${esc(brand.logoUrl)}" alt="${esc(brand.name)}" style="height:34px;max-width:220px;object-fit:contain"/>`
+        : `<div class="brand-mark"><span class="brand-a">${esc(brand.name)}</span></div>`)
+    : `<div class="brand-mark"><span class="brand-p">PRESET</span><span class="brand-amp">&amp;</span><span class="brand-a">PROFIT</span></div>`;
   return `
   <!-- ══ COVER ══ -->
   <div class="page cover">
     <div class="cover-top">
-      <div class="brand-mark">
-        <span class="brand-p">PRESET</span><span class="brand-amp">&amp;</span><span class="brand-a">PROFIT</span>
-      </div>
+      ${mark}
       <div class="cover-eyebrow">AUTOMATION OPPORTUNITY REPORT</div>
     </div>
 
@@ -87,8 +90,8 @@ function coverPage(r) {
       </div>
       <div class="cover-prepared">
         <div class="cover-prepared-by">Prepared by</div>
-        <div class="cover-prepared-name">Preset &amp; Profit</div>
-        <div class="cover-prepared-url">presetandprofit.com</div>
+        <div class="cover-prepared-name">${esc(brand.name)}</div>
+        ${brand.url ? `<div class="cover-prepared-url">${esc(brand.url)}</div>` : ""}
       </div>
     </div>
 
@@ -96,7 +99,7 @@ function coverPage(r) {
   </div>`;
 }
 
-function summaryPage(r) {
+function summaryPage(r, brand) {
   return `
   <!-- ══ EXECUTIVE SUMMARY ══ -->
   <div class="page interior">
@@ -142,13 +145,13 @@ function summaryPage(r) {
 
       <div class="page-footer">
         <span>${esc(r.businessName)} · Automation Opportunity Report · ${DATE_STR}</span>
-        <span>Prepared by Preset &amp; Profit · presetandprofit.com</span>
+        <span>Prepared by ${esc(brand.name)}${brand.url ? ` · ${esc(brand.url)}` : ""}</span>
       </div>
     </div>
   </div>`;
 }
 
-function findingsPage(r) {
+function findingsPage(r, brand) {
   const findingRow = (f) => {
     const b = badge(f.status);
     // Evidence findings (from a real site scan) carry why/proof/fix/impact.
@@ -210,13 +213,13 @@ function findingsPage(r) {
 
       <div class="page-footer">
         <span>${esc(r.businessName)} · Automation Opportunity Report · ${DATE_STR}</span>
-        <span>Prepared by Preset &amp; Profit · presetandprofit.com</span>
+        <span>Prepared by ${esc(brand.name)}${brand.url ? ` · ${esc(brand.url)}` : ""}</span>
       </div>
     </div>
   </div>`;
 }
 
-function revenueOpportunitiesPage(r) {
+function revenueOpportunitiesPage(r, brand) {
   const totalRev = (r.automations||[]).reduce((s,a) => s + (a.roiAmt||0), 0);
 
   const autoCard = (a) => `
@@ -269,13 +272,13 @@ function revenueOpportunitiesPage(r) {
 
       <div class="page-footer">
         <span>${esc(r.businessName)} · Automation Opportunity Report · ${DATE_STR}</span>
-        <span>Prepared by Preset &amp; Profit · presetandprofit.com</span>
+        <span>Prepared by ${esc(brand.name)}${brand.url ? ` · ${esc(brand.url)}` : ""}</span>
       </div>
     </div>
   </div>`;
 }
 
-function planPage(r) {
+function planPage(r, brand) {
   const phases = r.thirtyDayPlan
     ? [r.thirtyDayPlan.phase1, r.thirtyDayPlan.phase2, r.thirtyDayPlan.phase3]
     : [];
@@ -319,7 +322,7 @@ function planPage(r) {
 
       <div class="page-footer">
         <span>${esc(r.businessName)} · Automation Opportunity Report · ${DATE_STR}</span>
-        <span>Prepared by Preset &amp; Profit · presetandprofit.com</span>
+        <span>Prepared by ${esc(brand.name)}${brand.url ? ` · ${esc(brand.url)}` : ""}</span>
       </div>
     </div>
   </div>`;
@@ -803,41 +806,68 @@ body {
 // MAIN BUILDER
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function buildHTML(r) {
+// Watermark CSS for the free tier — a faint repeating stamp on every page that
+// survives print-to-PDF (print-color-adjust keeps it visible).
+const WATERMARK_CSS = `
+.page { position: relative; }
+.page::after {
+  content: "PREVIEW";
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Inter','Helvetica Neue',sans-serif; font-weight: 800;
+  font-size: 120px; color: rgba(120,120,120,0.10);
+  transform: rotate(-32deg); pointer-events: none; z-index: 9999;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}`;
+
+export function buildHTML(r, { branding = null, watermark = false } = {}) {
+  const whiteLabel = !!(branding && (branding.name || branding.logoUrl));
+  const brand = {
+    name: branding?.name || "Preset & Profit",
+    url: whiteLabel ? "" : "presetandprofit.com",
+    logoUrl: branding?.logoUrl || null,
+    whiteLabel,
+  };
+  const title = whiteLabel
+    ? `${esc(brand.name)} — ${esc(r.businessName)} Report`
+    : `Preset &amp; Profit — ${esc(r.businessName)} Automation Report`;
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Preset &amp; Profit — ${esc(r.businessName)} Automation Report</title>
-  <style>${CSS}</style>
+  <title>${title}</title>
+  <style>${CSS}${watermark ? WATERMARK_CSS : ""}</style>
 </head>
 <body>
 
 <!-- Screen-only print bar -->
 <div class="screen-bar">
-  Preset &amp; Profit — ${esc(r.businessName)} Automation Report &nbsp;·&nbsp;
-  <a href="https://presetandprofit.com/call">Book Implementation Call →</a>
+  ${esc(brand.name)} — ${esc(r.businessName)} Report &nbsp;·&nbsp;
   <button onclick="window.print()">Save as PDF ↓</button>
 </div>
 
-${coverPage(r)}
-${summaryPage(r)}
-${findingsPage(r)}
-${revenueOpportunitiesPage(r)}
-${planPage(r)}
-${ctaPage(r)}
+${coverPage(r, brand)}
+${summaryPage(r, brand)}
+${findingsPage(r, brand)}
+${revenueOpportunitiesPage(r, brand)}
+${planPage(r, brand)}
+${whiteLabel ? "" : ctaPage(r)}
 
 </body>
 </html>`;
 }
 
-export function downloadReport(r) {
-  const html = buildHTML(r);
+export function downloadReport(r, opts = {}) {
+  const html = buildHTML(r, opts);
   const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const prefix = opts.branding?.name
+    ? opts.branding.name.replace(/[^\w]+/g, "-")
+    : "Preset-Profit";
   const a    = document.createElement("a");
   a.href     = URL.createObjectURL(blob);
-  a.download = `Preset-Profit-Report-${(r.businessName || "Report").replace(/\s+/g,"-")}-${new Date().toISOString().slice(0,10)}.html`;
+  a.download = `${prefix}-Report-${(r.businessName || "Report").replace(/\s+/g,"-")}-${new Date().toISOString().slice(0,10)}.html`;
   a.click();
   URL.revokeObjectURL(a.href);
 }

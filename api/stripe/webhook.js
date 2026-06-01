@@ -45,20 +45,40 @@ export default async function handler(req, res) {
   }
 
   try {
+    let result = { ok: true };
     switch (event.type) {
       case "customer.subscription.created":
       case "customer.subscription.updated":
-        await syncSubscriptionRecord(event.data.object);
+        result = await syncSubscriptionRecord(event.data.object);
         break;
 
       case "customer.subscription.deleted": {
         const sub = event.data.object;
-        await syncSubscriptionRecord(sub);
+        result = await syncSubscriptionRecord(sub);
         await logAdminEvent("cancellation", {
           userId: sub.metadata?.supabase_user_id || null,
           email: await emailForUserId(sub.metadata?.supabase_user_id),
           detail: { message: "subscription canceled" },
         });
+        break;
+      }
+
+      // Stripe fires these on dunning. Re-sync so failed-payment / recovery state
+      // propagates promptly; also log a failed_payment event for the admin feed.
+      case "invoice.payment_failed":
+      case "invoice.paid":
+      case "invoice.payment_succeeded": {
+        const invoice = event.data.object;
+        if (invoice.subscription) {
+          const sub = await stripe.subscriptions.retrieve(invoice.subscription);
+          result = await syncSubscriptionRecord(sub);
+        }
+        if (event.type === "invoice.payment_failed") {
+          await logAdminEvent("failed_payment", {
+            email: invoice.customer_email || null,
+            detail: { message: "payment failed", amount: invoice.amount_due },
+          });
+        }
         break;
       }
 
@@ -71,7 +91,7 @@ export default async function handler(req, res) {
           if (!sub.metadata?.supabase_user_id && session.client_reference_id) {
             sub.metadata = { ...sub.metadata, supabase_user_id: session.client_reference_id };
           }
-          await syncSubscriptionRecord(sub);
+          result = await syncSubscriptionRecord(sub);
           await logAdminEvent("upgrade", {
             userId: sub.metadata?.supabase_user_id || null,
             email: session.customer_details?.email || await emailForUserId(sub.metadata?.supabase_user_id),
@@ -81,19 +101,19 @@ export default async function handler(req, res) {
         break;
       }
 
-      case "invoice.payment_failed": {
-        const inv = event.data.object;
-        await logAdminEvent("failed_payment", {
-          email: inv.customer_email || null,
-          detail: { message: "payment failed", amount: inv.amount_due },
-        });
-        break;
-      }
-
       default:
         // Ignore unrelated events.
         break;
     }
+
+    // A DB write failure is transient — return 500 so Stripe retries and the
+    // subscription state can't permanently desync. "no-user" is NOT retriable
+    // (it will never resolve), so we ack it with 200 to stop the retries.
+    if (result && result.ok === false && result.reason === "db-error") {
+      console.error("[webhook] db write failed, asking Stripe to retry", event.type);
+      return res.status(500).json({ error: "db-write-failed" });
+    }
+
     return res.status(200).json({ received: true });
   } catch (e) {
     console.error("[webhook] handler error", e);

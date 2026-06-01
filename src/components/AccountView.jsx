@@ -76,6 +76,19 @@ export default function AccountView({ audits }) {
 
   const isPaid = plan.id !== "free";
 
+  // Human-readable subscription status. Professional shows "Trial · ends <date>";
+  // Agency (no trial) and recovered subs show "Active"; other statuses are shown
+  // capitalized (e.g. "Past_due", "Canceled").
+  const statusLabel = (() => {
+    const s = subscription?.status;
+    if (s === "trialing") {
+      const ends = subscription?.trial_ends_at;
+      return ends ? `Trial · ends ${new Date(ends).toLocaleDateString()}` : "Trial";
+    }
+    if (!s) return "Active";
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  })();
+
   return (
     <div className="page-pad" style={{ maxWidth: 860, margin: "0 auto", animation: "fadeUp .4s ease" }}>
       <h1 style={{ fontFamily: "Syne", fontSize: 24, fontWeight: 800, marginBottom: 6 }}>Account & Plan</h1>
@@ -101,7 +114,7 @@ export default function AccountView({ audits }) {
           <div style={{ textAlign: "right" }}>
             <div style={{ marginBottom: 6 }}><Tag color="var(--amber)">{plan.name} plan</Tag></div>
             <div style={{ fontSize: 11, color: "var(--muted)" }}>
-              {subscription?.status === "trialing" ? "Trial" : subscription?.status || "active"}
+              {statusLabel}
             </div>
             {isPaid && (
               <div style={{ marginTop: 8 }}>
@@ -153,6 +166,11 @@ export default function AccountView({ audits }) {
                 <span style={{ fontSize: 12, color: "var(--muted)" }}> {p.priceNote}</span>
               </div>
               <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12, minHeight: 32 }}>{p.blurb}</div>
+              {id !== "free" && (
+                <div style={{ fontSize: 11, fontWeight: 600, color: p.trialDays ? "var(--green)" : "var(--muted)", marginBottom: 10 }}>
+                  {p.trialDays ? `Start with a ${p.trialDays}-day free trial.` : "Immediate activation. No trial required."}
+                </div>
+              )}
               <ul style={{ listStyle: "none", padding: 0, margin: "0 0 16px", display: "grid", gap: 6 }}>
                 {p.features.map((f) => (
                   <li key={f} style={{ fontSize: 11, color: "var(--text)", display: "flex", gap: 8 }}>
@@ -175,7 +193,7 @@ export default function AccountView({ audits }) {
       </div>
 
       <p style={{ fontSize: 11, color: "var(--muted)", marginBottom: 20 }}>
-        Secure checkout by Stripe. Paid plans include a {PLANS.professional.trialDays}-day free trial. Cancel anytime from Manage billing.
+        Secure checkout by Stripe. Cancel anytime from Manage billing.
       </p>
 
       <Btn variant="ghost" onClick={signOut}>Sign out</Btn>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import GlobalStyles from "./GlobalStyles.jsx";
 import Dashboard from "./Dashboard.jsx";
 import AuditScanner from "./AuditScanner.jsx";
@@ -41,9 +41,39 @@ function UpgradePanel({ plan, onAccount }) {
   );
 }
 
+// Full-screen maintenance gate shown to non-admins when maintenance mode is on.
+function MaintenanceScreen({ onSignOut }) {
+  return (
+    <>
+      <GlobalStyles />
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: "var(--bg, #0a0a0f)" }}>
+        <div style={{ maxWidth: 440, textAlign: "center" }}>
+          <div style={{ fontSize: 40, marginBottom: 16 }}>🛠️</div>
+          <h1 style={{ fontFamily: "Syne", fontSize: 24, fontWeight: 800, marginBottom: 10 }}>We'll be right back</h1>
+          <p style={{ color: "var(--muted)", fontSize: 14, lineHeight: 1.7, marginBottom: 20 }}>
+            Preset &amp; Profit is undergoing scheduled maintenance. Your data is safe — please check back shortly.
+          </p>
+          <button onClick={onSignOut} style={{ background: "transparent", border: "1px solid var(--border-bright)", borderRadius: 6, color: "var(--muted)", padding: "8px 16px", cursor: "pointer", fontFamily: "IBM Plex Mono", fontSize: 12 }}>Sign out</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 export default function AppShell() {
   const { user, profile, plan, subscription, signOut } = useAuth();
   const { audits, save, remove } = useAudits();
+
+  // Admin = profile flag OR the owner email (mirrors the server allowlist).
+  const isAdmin = !!profile?.is_admin || (user?.email || "").toLowerCase() === "justin@presetprofit.com";
+
+  // System status (maintenance mode etc.) — public booleans, polled once.
+  const [sys, setSys] = useState(null);
+  useEffect(() => {
+    let active = true;
+    fetch("/api/system/status").then((r) => r.json()).then((d) => { if (active) setSys(d); }).catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   // Land on the Account view when returning from Stripe Checkout / billing
   // portal (success_url & return_url carry ?checkout= or ?view=account).
@@ -94,6 +124,9 @@ export default function AppShell() {
 
   const usagePct = usage.limit > 0 ? Math.min(100, Math.round((usage.used / usage.limit) * 100)) : 0;
 
+  // Maintenance gate — non-admins see the maintenance screen (all hooks above ran).
+  if (sys?.maintenance && !isAdmin) return <MaintenanceScreen onSignOut={signOut} />;
+
   return (
     <div className="main-layout">
       <GlobalStyles />
@@ -120,7 +153,7 @@ export default function AppShell() {
         </div>
 
         <nav style={{ padding: "12px 10px", flex: 1 }}>
-          {(profile?.is_admin ? [...NAV, { id: "admin", label: "Admin", icon: "⚙" }] : NAV).map(item => {
+          {(isAdmin ? [...NAV, { id: "admin", label: "Admin", icon: "⚙" }] : NAV).map(item => {
             // When viewing a report, treat "dashboard" as the active parent
             const isActive = view === item.id || (view === "report" && item.id === "dashboard");
             return (
@@ -223,7 +256,7 @@ export default function AppShell() {
 
         {view === "account" && <AccountView audits={audits} />}
 
-        {view === "admin" && profile?.is_admin && <AdminView />}
+        {view === "admin" && isAdmin && <AdminView />}
       </div>
     </div>
   );

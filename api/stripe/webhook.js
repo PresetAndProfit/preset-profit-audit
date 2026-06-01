@@ -6,6 +6,15 @@
 // Local:  stripe listen --forward-to localhost:5173/api/stripe/webhook
 import { stripe } from "../_lib/stripe.js";
 import { syncSubscriptionRecord } from "../_lib/syncSubscription.js";
+import { supabaseAdmin } from "../_lib/supabaseAdmin.js";
+import { logAdminEvent } from "../_lib/systemSettings.js";
+
+// Resolve a denormalized email for the admin activity feed (best-effort).
+async function emailForUserId(uid) {
+  if (!uid) return null;
+  const { data } = await supabaseAdmin.from("profiles").select("email").eq("id", uid).maybeSingle();
+  return data?.email || null;
+}
 
 // Disable Vercel's automatic body parsing so we can read the raw bytes that
 // Stripe signed. Without this, signature verification fails.
@@ -39,9 +48,19 @@ export default async function handler(req, res) {
     switch (event.type) {
       case "customer.subscription.created":
       case "customer.subscription.updated":
-      case "customer.subscription.deleted":
         await syncSubscriptionRecord(event.data.object);
         break;
+
+      case "customer.subscription.deleted": {
+        const sub = event.data.object;
+        await syncSubscriptionRecord(sub);
+        await logAdminEvent("cancellation", {
+          userId: sub.metadata?.supabase_user_id || null,
+          email: await emailForUserId(sub.metadata?.supabase_user_id),
+          detail: { message: "subscription canceled" },
+        });
+        break;
+      }
 
       case "checkout.session.completed": {
         // Fetch the full subscription so we have items/price/period fields.
@@ -53,7 +72,21 @@ export default async function handler(req, res) {
             sub.metadata = { ...sub.metadata, supabase_user_id: session.client_reference_id };
           }
           await syncSubscriptionRecord(sub);
+          await logAdminEvent("upgrade", {
+            userId: sub.metadata?.supabase_user_id || null,
+            email: session.customer_details?.email || await emailForUserId(sub.metadata?.supabase_user_id),
+            detail: { message: "subscription started" },
+          });
         }
+        break;
+      }
+
+      case "invoice.payment_failed": {
+        const inv = event.data.object;
+        await logAdminEvent("failed_payment", {
+          email: inv.customer_email || null,
+          detail: { message: "payment failed", amount: inv.amount_due },
+        });
         break;
       }
 

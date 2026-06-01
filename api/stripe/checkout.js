@@ -3,6 +3,8 @@
 import { stripe, priceIdForPlan } from "../_lib/stripe.js";
 import { supabaseAdmin, getUserFromRequest } from "../_lib/supabaseAdmin.js";
 import { getPlan } from "../../src/lib/plans.js";
+import { isDisabled } from "../_lib/systemSettings.js";
+import { isAdminEmail } from "../_lib/adminAuth.js";
 
 const APP_URL = process.env.APP_URL || "http://localhost:5173";
 
@@ -11,6 +13,11 @@ export default async function handler(req, res) {
 
   const user = await getUserFromRequest(req);
   if (!user) return res.status(401).json({ error: "unauthorized" });
+
+  // System control: admin can disable checkout platform-wide (admins exempt).
+  if (!isAdminEmail(user.email) && await isDisabled("checkout_disabled")) {
+    return res.status(503).json({ error: "checkout-disabled", message: "Checkout is temporarily unavailable. Please try again soon." });
+  }
 
   // Env preflight — reports exactly which Stripe variable is missing so the
   // misconfiguration is visible client-side. Only presence is checked; no

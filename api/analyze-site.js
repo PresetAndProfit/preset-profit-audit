@@ -18,6 +18,8 @@ import {
 } from "./_lib/usageServer.js";
 import { aiEnabled, generateConsultantReport } from "./_lib/aiFindings.js";
 import { validateReport, mustMentionCoverage } from "./_lib/findingsValidation.js";
+import { isDisabled } from "./_lib/systemSettings.js";
+import { isAdminEmail } from "./_lib/adminAuth.js";
 
 // Layer 2+3: run the AI consultant on a successful scrape, with one corrective
 // retry if the validator rejects the first attempt. Returns the validated
@@ -60,6 +62,11 @@ export default async function handler(req, res) {
   // 1. Authentication
   const user = await getUserFromRequest(req);
   if (!user) return res.status(401).json({ ok: false, error: "unauthorized" });
+
+  // System control: admin can disable audits platform-wide (admins exempt).
+  if (!isAdminEmail(user.email) && await isDisabled("audits_disabled")) {
+    return res.status(503).json({ ok: false, error: "audits-disabled" });
+  }
 
   // 2. Input
   const body = typeof req.body === "string" ? safeJson(req.body) : (req.body || {});

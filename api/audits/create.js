@@ -6,6 +6,8 @@
 // POST /api/audits/create  Body: { audit }  Header: Authorization: Bearer <token>
 import { supabaseAdmin, getUserFromRequest } from "../_lib/supabaseAdmin.js";
 import { assertCanCreateAudit, logUsageEvent } from "../_lib/usageServer.js";
+import { isDisabled } from "../_lib/systemSettings.js";
+import { isAdminEmail } from "../_lib/adminAuth.js";
 
 function reportToRow(userId, audit) {
   return {
@@ -23,6 +25,11 @@ export default async function handler(req, res) {
 
   const user = await getUserFromRequest(req);
   if (!user) return res.status(401).json({ error: "unauthorized" });
+
+  // System control: admin can disable audits platform-wide (admins exempt).
+  if (!isAdminEmail(user.email) && await isDisabled("audits_disabled")) {
+    return res.status(503).json({ error: "audits-disabled" });
+  }
 
   const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
   const audit = body.audit;

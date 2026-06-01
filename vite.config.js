@@ -12,7 +12,6 @@ function devApiPlugin() {
     { path: '/api/analyze-site',   mod: '/api/analyze-site.js',   parse: true },
     { path: '/api/audits/create',  mod: '/api/audits/create.js',  parse: true },
     { path: '/api/audits/import',  mod: '/api/audits/import.js',  parse: true },
-    { path: '/api/admin/usage',    mod: '/api/admin/usage.js',    parse: true },
     { path: '/api/admin/console',  mod: '/api/admin/console.js',  parse: true },
     { path: '/api/system/status',  mod: '/api/system/status.js',  parse: true },
     { path: '/api/share/create',   mod: '/api/share/create.js',   parse: true },

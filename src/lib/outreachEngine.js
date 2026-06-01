@@ -39,7 +39,7 @@ function ground(report) {
   };
 }
 
-export function generateOutreach(report, { senderName = "", senderCompany = "Preset & Profit", toName = "" } = {}) {
+export function generateOutreach(report, { senderName = "", senderCompany = "Preset & Profit", toName = "", calendarUrl = "" } = {}) {
   if (!report) return null;
   const g = ground(report);
   const hi = firstName(toName) || "there";
@@ -48,6 +48,11 @@ export function generateOutreach(report, { senderName = "", senderCompany = "Pre
   const industryTitle = report.industry || "business";
   const cityClause = g.city ? ` in ${g.city}` : "";
   const m = usd(g.monthly), a = usd(g.annual);
+  // Real booking CTA — embeds the operator's calendar link when set, otherwise a
+  // working "reply to book" fallback. Never ships a dead placeholder.
+  const book = calendarUrl
+    ? `grab 15 minutes here and I'll walk you through exactly where the ${m}/mo is going: ${calendarUrl}`
+    : `just reply "send it" and I'll get you the full breakdown (or a time to talk)`;
 
   // ── Subject lines (operator can A/B these) ────────────────────────────────
   const subjectLines = [
@@ -70,7 +75,7 @@ Adding it up, ${g.biz} is likely leaving about ${m} every month on the table —
 
 The single highest-impact fix is ${g.topFix.toLowerCase()}, which alone could recover about ${usd(g.topFixImpact)}/mo, and it runs on autopilot once it's set up. I've mapped out ${g.nSystems} systems${g.bundle ? ` (packaged as the ${g.bundle})` : ""} that close the gaps — done-for-you, live within about a week, no work on your end.
 
-Want me to send over the full breakdown with the numbers? Or grab 15 minutes here and I'll walk you through exactly where the ${m}/mo is going: [your calendar link]
+Want me to send over the full breakdown with the numbers? Or ${book}.
 
 — ${sign}`,
   };

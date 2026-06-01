@@ -40,3 +40,9 @@ alter table public.audits add column if not exists crm jsonb not null default '{
 create index if not exists audits_user_stage_idx on public.audits (user_id, stage);
 create index if not exists audits_due_action_idx on public.audits (next_action_at)
   where next_action_at is not null;
+
+-- Booking CTA: the operator's own scheduling link, embedded into outreach copy
+-- and the proposal's "Book the call" button so every artifact drives a real,
+-- trackable booked call. Client-updatable via the existing "own profile update"
+-- RLS policy (no server endpoint needed).
+alter table public.profiles add column if not exists calendar_url text;

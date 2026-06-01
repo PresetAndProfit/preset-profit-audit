@@ -26,7 +26,7 @@ function HeroStat({ label, value, sub, accent }) {
   );
 }
 
-export default function RoadmapView({ report: r, onBack, branding = null, watermark = false, updateDeal = null, onGenerateOutreach = null }) {
+export default function RoadmapView({ report: r, onBack, branding = null, watermark = false, updateDeal = null, onGenerateOutreach = null, cta = null }) {
   const [tab, setTab] = useState("roadmap");
   const [sent, setSent] = useState(false);
 
@@ -39,7 +39,7 @@ export default function RoadmapView({ report: r, onBack, branding = null, waterm
   // Downloading the proposal is the "Proposal Generated" pipeline stage — stamp
   // the deal forward and capture its value (the agency's first-year revenue).
   const download = () => {
-    downloadRoadmap(rm, { branding, watermark });
+    downloadRoadmap(rm, { branding, watermark, cta });
     setSent(true);
     if (updateDeal && r?.id) {
       stampStage(updateDeal, r, "proposal", { deal_value_cents: dealValueCents(rm), detail: "proposal downloaded" });

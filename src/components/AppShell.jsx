@@ -135,6 +135,16 @@ export default function AppShell() {
     ? { name: profile?.company_name || null, logoUrl: profile?.brand_logo_url || null, color: profile?.brand_color || null }
     : null;
 
+  // Booking/CTA identity — every plan. Threads the operator's real booking link
+  // and contact into outreach copy and the proposal's "Book the call" button, so
+  // every artifact drives a trackable booked call (the funnel's money event).
+  const cta = {
+    calendarUrl: profile?.calendar_url || null,
+    contactEmail: user?.email || null,
+    senderName: profile?.full_name || null,
+    senderCompany: (branding && branding.name) || profile?.company_name || null,
+  };
+
   // Agency-only share-link generator passed into ReportView.
   const handleShare = async (audit) => {
     const { ok, json } = await authedJson("/api/share/create", { body: { auditId: audit.id } });
@@ -285,6 +295,7 @@ export default function AppShell() {
             branding={branding}
             watermark={plan.watermark}
             updateDeal={updateDeal}
+            cta={cta}
             onGenerateOutreach={() => openOutreachFor(liveReport)}
           />
         )}
@@ -295,6 +306,7 @@ export default function AppShell() {
             onBack={() => setView("roadmap")}
             branding={branding}
             updateDeal={updateDeal}
+            cta={cta}
           />
         )}
 

@@ -31,11 +31,13 @@ function Block({ title, meta, text, children }) {
 // Renders the generated outreach for a Deal, lets the operator copy each asset,
 // persists a summary to the Deal (advancing stage → Outreach), and schedules the
 // first follow-up. The actual copy is re-derivable, so we store only a summary.
-export default function OutreachView({ report: deal, updateDeal, onBack, branding = null }) {
-  const senderCompany = branding?.name || "Preset & Profit";
+export default function OutreachView({ report: deal, updateDeal, onBack, branding = null, cta = null }) {
+  const senderCompany = cta?.senderCompany || branding?.name || "Preset & Profit";
+  const senderName = cta?.senderName || "";
+  const calendarUrl = cta?.calendarUrl || "";
   const out = useMemo(
-    () => generateOutreach(deal, { senderCompany, toName: deal.contact_name || "" }),
-    [deal, senderCompany]
+    () => generateOutreach(deal, { senderCompany, senderName, calendarUrl, toName: deal.contact_name || "" }),
+    [deal, senderCompany, senderName, calendarUrl]
   );
   const [saved, setSaved] = useState(!!deal.crm?.outreach);
 
@@ -70,6 +72,13 @@ export default function OutreachView({ report: deal, updateDeal, onBack, brandin
           <Btn variant={saved ? "success" : "primary"} onClick={saveToDeal}>{saved ? "✓ Saved to deal" : "Save to deal →"}</Btn>
         </div>
       </div>
+
+      {/* Booking-link nudge — embeds a real CTA into the copy */}
+      {!calendarUrl && (
+        <div style={{ background: "rgba(245,166,35,0.08)", border: "1px dashed var(--amber)", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: "var(--amber)", lineHeight: 1.6 }}>
+          💡 Add your booking link in <strong>Account → Booking &amp; outreach identity</strong> and it'll be embedded into every email automatically — so prospects can book a call in one click.
+        </div>
+      )}
 
       {/* Subject-line picks */}
       <div style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 8, padding: "14px 16px", marginBottom: 16 }}>

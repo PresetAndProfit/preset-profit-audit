@@ -29,6 +29,13 @@ export default function DealDrawer({ deal, updateDeal, onClose, onViewReport, on
 
   const persist = async patch => { setBusy(true); try { await updateDeal(deal.id, patch); } finally { setBusy(false); } };
 
+  // Booked call = the funnel's money event. Log it and pull the deal into the
+  // active "follow-up" working stage (never downgrading a closed deal).
+  const markCallBooked = () => persist({
+    stage: isClosed(stage) ? stage : "followup",
+    crm: appendActivity(crm, "call", "📞 Call booked"),
+  });
+
   const saveContact = () => persist({ contact_email: email || null, contact_name: name || null });
   const changeStage = e => setStage(updateDeal, deal, e.target.value);
   const addNote = () => { if (!note.trim()) return; persist({ crm: appendNote(crm, note.trim()) }); setNote(""); };
@@ -76,7 +83,8 @@ export default function DealDrawer({ deal, updateDeal, onClose, onViewReport, on
             <div style={{ display: "grid", gap: 8 }}>
               <Btn small variant="ghost" onClick={() => onViewReport?.(deal)}>① View Audit Report</Btn>
               <Btn small variant="ghost" onClick={() => onViewRoadmap?.(deal)}>② Build Roadmap &amp; Proposal →</Btn>
-              <Btn small variant="primary" onClick={() => onViewOutreach?.(deal)}>③ Generate Outreach →</Btn>
+              <Btn small variant="ghost" onClick={() => onViewOutreach?.(deal)}>③ Generate Outreach →</Btn>
+              {!isClosed(stage) && <Btn small variant="primary" onClick={markCallBooked} disabled={busy}>📞 Mark call booked</Btn>}
             </div>
           </Section>
 

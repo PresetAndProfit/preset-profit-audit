@@ -467,14 +467,16 @@ const WATERMARK_CSS = `
 }`;
 
 // ─────────────────────────────────────────────────────────────────────────────
-export function buildRoadmapHTML(rm, { branding = null, watermark = false } = {}) {
+export function buildRoadmapHTML(rm, { branding = null, watermark = false, cta = null } = {}) {
   const whiteLabel = !!(branding && (branding.name || branding.logoUrl));
   const brand = {
     name: branding?.name || "Preset & Profit",
     url: whiteLabel ? (branding?.url || "") : "presetprofit.com",
     logoUrl: branding?.logoUrl || null,
-    email: whiteLabel ? (branding?.email || "") : "justin@presetprofit.com",
-    callUrl: branding?.callUrl || "https://presetandprofit.com/call",
+    // Contact + booking CTA prefer the operator's configured identity, so a
+    // sent proposal books a call with THEM. Falls back to the P&P funnel default.
+    email: cta?.contactEmail || branding?.email || (whiteLabel ? "" : "justin@presetprofit.com"),
+    callUrl: cta?.calendarUrl || branding?.callUrl || "https://presetandprofit.com/call",
     whiteLabel,
   };
   const title = `${esc(brand.name)} — ${esc(rm.business.name)} Automation Proposal`;

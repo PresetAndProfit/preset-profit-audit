@@ -12,9 +12,24 @@ import { supabase } from "./supabaseClient.js";
 import { authedJson } from "./api.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { STORAGE_KEY } from "./constants.js";
+import { deriveStage } from "./dealEngine.js";
 
+// The report object stored in `data` is the audit; the pipeline columns (added
+// in phase2-crm.sql) enrich it into a Deal. We merge them on read so the whole
+// app sees one object. Pre-migration rows simply lack the columns and fall back
+// to sensible defaults — selecting "*" keeps this resilient to migration order.
 function rowToReport(row) {
-  return row.data || {};
+  const data = row.data || {};
+  return {
+    ...data,
+    stage: row.stage || deriveStage(data),
+    crm: row.crm || {},
+    next_action_at: row.next_action_at || null,
+    last_contact_at: row.last_contact_at || null,
+    deal_value_cents: row.deal_value_cents ?? null,
+    contact_email: row.contact_email || data.email || null,
+    contact_name: row.contact_name || null,
+  };
 }
 
 function readLegacyLocal() {
@@ -33,7 +48,7 @@ export function useAudits() {
     if (!userId) { setAudits([]); setLoading(false); return; }
     const { data, error } = await supabase
       .from("audits")
-      .select("data, created_at")
+      .select("*")
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
     if (!error && data) setAudits(data.map(rowToReport));
@@ -87,5 +102,22 @@ export function useAudits() {
     if (error) await refresh();
   }, [userId, refresh]);
 
-  return { audits, loading, save, remove, refresh };
+  // Deal/CRM mutation (stage, notes, activity, outreach, next_action_at, …).
+  // Routes through the SAME server endpoint as audit writes via {op:'deal_update'}
+  // — no new serverless function, no credit consumed. Optimistic; rolls back on
+  // server rejection by re-reading. `patch` keys map 1:1 to audit columns.
+  const updateDeal = useCallback(async (clientId, patch) => {
+    if (!userId || !patch) return { ok: false, error: "no-op" };
+    setAudits((prev) => prev.map((a) => (String(a.id) === String(clientId) ? { ...a, ...patch } : a)));
+    const { ok, status, json } = await authedJson("/api/audits/create", {
+      body: { op: "deal_update", clientId: String(clientId), patch },
+    });
+    if (!ok) {
+      await refresh();
+      return { ok: false, error: json?.error || `deal-update-${status}`, status };
+    }
+    return { ok: true };
+  }, [userId, refresh]);
+
+  return { audits, loading, save, remove, refresh, updateDeal };
 }

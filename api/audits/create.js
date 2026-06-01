@@ -10,6 +10,25 @@ import { isDisabled } from "../_lib/systemSettings.js";
 import { isAdminEmail } from "../_lib/adminAuth.js";
 import { onAuditComplete } from "../_lib/lifecycleEmails.js";
 import { effectivePlan } from "../../src/lib/plans.js";
+import { STAGE_KEYS } from "../../src/lib/dealEngine.js";
+
+const VALID_STAGES = new Set(STAGE_KEYS);
+
+// Build a whitelisted column patch from a client deal_update. NEVER trusts
+// user_id/data/credit fields — only pipeline columns are writable, and stage is
+// constrained to the known vocabulary. Returns null if nothing valid was sent.
+function sanitizeDealPatch(patch) {
+  if (!patch || typeof patch !== "object") return null;
+  const out = {};
+  if (typeof patch.stage === "string" && VALID_STAGES.has(patch.stage)) out.stage = patch.stage;
+  if (patch.next_action_at === null || typeof patch.next_action_at === "string") out.next_action_at = patch.next_action_at || null;
+  if (patch.last_contact_at === null || typeof patch.last_contact_at === "string") out.last_contact_at = patch.last_contact_at || null;
+  if (patch.deal_value_cents === null || Number.isFinite(patch.deal_value_cents)) out.deal_value_cents = patch.deal_value_cents ?? null;
+  if (patch.contact_email === null || typeof patch.contact_email === "string") out.contact_email = patch.contact_email ? String(patch.contact_email).slice(0, 200) : null;
+  if (patch.contact_name === null || typeof patch.contact_name === "string") out.contact_name = patch.contact_name ? String(patch.contact_name).slice(0, 200) : null;
+  if (patch.crm && typeof patch.crm === "object" && !Array.isArray(patch.crm)) out.crm = patch.crm;
+  return Object.keys(out).length ? out : null;
+}
 
 function reportToRow(userId, audit) {
   return {
@@ -28,12 +47,42 @@ export default async function handler(req, res) {
   const user = await getUserFromRequest(req);
   if (!user) return res.status(401).json({ error: "unauthorized" });
 
+  const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
+
+  // ── Deal/CRM update path ──────────────────────────────────────────────────
+  // Reuses this endpoint (no new serverless function) to mutate pipeline columns
+  // on the caller's OWN audit row. Strictly user-scoped, no credit check, no
+  // audit creation. This branch can never mint an audit or bypass tier gating —
+  // it only UPDATEs existing rows matched by (user_id, client_id).
+  if (body.op === "deal_update") {
+    const clientId = body.clientId != null ? String(body.clientId) : "";
+    const patch = sanitizeDealPatch(body.patch);
+    if (!clientId || !patch) return res.status(400).json({ error: "invalid-deal-update" });
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("audits")
+        .update(patch)
+        .eq("user_id", user.id)
+        .eq("client_id", clientId)
+        .select("id")
+        .maybeSingle();
+      if (error) {
+        console.error("[audits/create] deal_update failed", error);
+        return res.status(500).json({ error: "deal-update-failed" });
+      }
+      if (!data) return res.status(404).json({ error: "deal-not-found" });
+      return res.status(200).json({ ok: true });
+    } catch (e) {
+      console.error("[audits/create] deal_update", e);
+      return res.status(500).json({ error: "server-error" });
+    }
+  }
+
   // System control: admin can disable audits platform-wide (admins exempt).
   if (!isAdminEmail(user.email) && await isDisabled("audits_disabled")) {
     return res.status(503).json({ error: "audits-disabled" });
   }
 
-  const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
   const audit = body.audit;
   if (!audit || typeof audit !== "object" || !audit.id) {
     return res.status(400).json({ error: "invalid-audit" });

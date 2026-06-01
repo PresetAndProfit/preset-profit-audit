@@ -59,8 +59,9 @@ function coverPage(rm, brand) {
         ${b.goal ? `<span class="cover-dot">·</span><span>Goal: ${esc(b.goal)}</span>` : ""}
       </div>
       <div class="cover-headline">
-        A sequenced plan to recover <span class="hl">${esc(usd(rm.totals.monthlyImpact))}/month</span>
-        in leaking revenue — and the systems that do it on autopilot.
+        ${rm.hasRecommendations
+          ? `A sequenced plan to add <span class="hl">+${esc(usd(rm.totals.monthlyNet))}/month</span> in net profit — only the systems that clearly pay for themselves.`
+          : `An honest assessment of where automation does — and doesn't — pay off yet.`}
       </div>
     </div>
     <div class="cover-bottom">
@@ -98,10 +99,10 @@ function opportunityPage(rm, brand) {
       <div class="exec-box"><p class="exec-text">${esc(rm.proposal.opportunityStatement)}</p></div>
 
       <div class="stat-grid">
-        ${stat("Recoverable / month", usd(t.monthlyImpact), "across all proposed systems", true)}
-        ${stat("Recoverable / year", usd(t.annualImpact), "across all proposed systems", true)}
+        ${stat("Net gain / month", `+${usd(t.monthlyNet)}`, "after all costs — what you keep", true)}
+        ${stat("Revenue recovered / mo", usd(t.monthlyImpact), `vs ${usd(t.monthly)}/mo cost`, true)}
         ${stat("First-year return", `${t.roiMultiple}×`, "revenue vs. total investment")}
-        ${stat("Investment recouped", t.paybackMonths != null ? `${t.paybackMonths} mo` : "—", "blended payback on setup")}
+        ${stat("Investment recouped", t.paybackText || "—", "blended payback on setup")}
       </div>
 
       <div class="invest-bar">
@@ -187,7 +188,7 @@ function solutionsPage(rm, brand) {
       <div class="sol-econ">
         <div class="econ-cell"><span class="econ-l">Setup</span><span class="econ-v">${usd(s.setup)}</span></div>
         <div class="econ-cell"><span class="econ-l">Monthly</span><span class="econ-v">${usd(s.monthly)}</span></div>
-        <div class="econ-cell"><span class="econ-l">Payback</span><span class="econ-v">${s.paybackMonths != null ? `${s.paybackMonths} mo` : "—"}</span></div>
+        <div class="econ-cell"><span class="econ-l">Payback</span><span class="econ-v">${s.paybackText || "—"}</span></div>
         <div class="econ-cell econ-hl"><span class="econ-l">1-yr ROI</span><span class="econ-v">${s.roiMultiple}×</span></div>
       </div>
     </div>`;
@@ -467,6 +468,56 @@ const WATERMARK_CSS = `
 }`;
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Future / additional opportunities — honest, NOT recommended now.
+function futurePage(rm, brand) {
+  const extra = rm.additionalOpportunities || [];
+  const future = [...(rm.futureOpportunities || []), ...(rm.validateOpportunities || [])];
+  if (!extra.length && !future.length) return "";
+  const extraRows = extra.map(s => `
+    <div class="map-solution" style="margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;gap:10px"><b>${esc(s.consumerName)}</b><span style="color:${GREEN};font-weight:700">${esc(usd(s.monthlyImpact))}/mo · ${s.roiMultiple}× ROI</span></div>
+      <div style="font-size:11px;color:${MUTED};margin-top:4px">Also clears our ROI bar — add once the first three are live.</div>
+    </div>`).join("");
+  const futureRows = future.map(f => `
+    <div class="map-problem" style="margin-bottom:8px">
+      <div><b>${esc(f.consumerName)}</b></div>
+      <div style="font-size:11px;color:${MUTED};margin-top:4px;line-height:1.5">${esc(f.reason)}</div>
+    </div>`).join("");
+  return `
+  <div class="page interior">
+    <div class="page-spine"></div>
+    <div class="page-content">
+      <div class="section-eyebrow">— FUTURE OPPORTUNITIES</div>
+      <h2 class="section-heading">What we're <em>not</em> recommending yet</h2>
+      <p class="plan-intro">We only recommend systems that clearly pay for themselves now. These are real opportunities we'd revisit as ${esc(rm.business.name)} grows — listed in full so nothing is hidden.</p>
+      ${extra.length ? `<div style="font-size:11px;color:${MUTED};text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Additional systems that also clear the bar</div>${extraRows}` : ""}
+      ${future.length ? `<div style="font-size:11px;color:${MUTED};text-transform:uppercase;letter-spacing:.1em;margin:14px 0 8px">Below the bar at current volume</div>${futureRows}` : ""}
+      <div class="page-footer">
+        <span>${esc(rm.business.name)} · Automation Roadmap &amp; Proposal · ${DATE_STR}</span>
+        <span>Prepared by ${esc(brand.name)}${brand.url ? ` · ${esc(brand.url)}` : ""}</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+// Honest one-pager when nothing clears the ROI gate — we don't fabricate a proposal.
+function honestPage(rm, brand) {
+  return `
+  <div class="page interior">
+    <div class="page-spine"></div>
+    <div class="page-content">
+      <div class="section-eyebrow">01 — HONEST ASSESSMENT</div>
+      <h2 class="section-heading">What's realistic for ${esc(rm.business.name)}</h2>
+      <div class="exec-box"><p class="exec-text">${esc(rm.proposal.opportunityStatement)}</p></div>
+      <p class="exec-text" style="font-weight:600;margin-bottom:18px">${esc(rm.proposal.recommendation)}</p>
+      <div class="page-footer">
+        <span>${esc(rm.business.name)} · Automation Roadmap &amp; Proposal · ${DATE_STR}</span>
+        <span>Prepared by ${esc(brand.name)}${brand.url ? ` · ${esc(brand.url)}` : ""}</span>
+      </div>
+    </div>
+  </div>`;
+}
+
 export function buildRoadmapHTML(rm, { branding = null, watermark = false, cta = null } = {}) {
   const whiteLabel = !!(branding && (branding.name || branding.logoUrl));
   const brand = {
@@ -495,11 +546,9 @@ export function buildRoadmapHTML(rm, { branding = null, watermark = false, cta =
   <button onclick="window.print()">Save as PDF ↓</button>
 </div>
 ${coverPage(rm, brand)}
-${opportunityPage(rm, brand)}
-${mappingPage(rm, brand)}
-${solutionsPage(rm, brand)}
-${roadmapPage(rm, brand)}
-${closePage(rm, brand)}
+${rm.hasRecommendations
+  ? `${opportunityPage(rm, brand)}${mappingPage(rm, brand)}${solutionsPage(rm, brand)}${roadmapPage(rm, brand)}${futurePage(rm, brand)}${closePage(rm, brand)}`
+  : `${honestPage(rm, brand)}${futurePage(rm, brand)}`}
 </body>
 </html>`;
 }

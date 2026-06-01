@@ -46,6 +46,35 @@ export default function RoadmapView({ report: r, onBack, branding = null, waterm
     }
   };
 
+  // Trust gate: if nothing clears the 3× ROI bar, we DON'T fabricate a proposal.
+  // We tell the operator the honest truth and surface what to validate instead.
+  if (!rm.hasRecommendations) {
+    return (
+      <div className="page-pad" style={{ animation: "fadeUp .4s ease", maxWidth: 680 }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 12, marginBottom: 8, fontFamily: "IBM Plex Mono" }}>← Back to Report</button>
+        <h1 style={{ fontFamily: "Syne", fontSize: 22, fontWeight: 800 }}>{rm.business.name} — Automation Roadmap</h1>
+        <div style={{ background: "var(--panel)", border: "1px solid var(--amber)", borderRadius: 10, padding: "22px 24px", marginTop: 16 }}>
+          <div style={{ fontSize: 10, color: "var(--amber)", textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 8 }}>Honest assessment</div>
+          <p style={{ fontSize: 13, lineHeight: 1.75 }}>{rm.proposal.opportunityStatement}</p>
+          <p style={{ fontSize: 13, lineHeight: 1.75, marginTop: 12, color: "var(--text)", fontWeight: 600 }}>{rm.proposal.recommendation}</p>
+        </div>
+        {(rm.futureOpportunities.length > 0 || rm.validateOpportunities.length > 0) && (
+          <div style={{ marginTop: 16 }}>
+            <div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>Opportunities to revisit as you grow</div>
+            <div style={{ display: "grid", gap: 8 }}>
+              {[...rm.futureOpportunities, ...rm.validateOpportunities].map((f, i) => (
+                <div key={i} style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 8, padding: "12px 16px" }}>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{f.consumerName}</div>
+                  <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 3, lineHeight: 1.5 }}>{f.reason}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="page-pad" style={{ animation: "fadeUp .4s ease", paddingBottom: 100 }}>
       {/* Header */}
@@ -74,12 +103,12 @@ export default function RoadmapView({ report: r, onBack, branding = null, waterm
         </div>
       )}
 
-      {/* Hero economics */}
+      {/* Hero economics — net gain is THE number */}
       <div className="stats-grid" style={{ gridTemplateColumns: "repeat(4,1fr)", marginBottom: 18 }}>
-        <HeroStat label="Recoverable / month" value={usd(t.monthlyImpact)} sub="across all proposed systems" accent />
-        <HeroStat label="Recoverable / year" value={usd(t.annualImpact)} sub={`≈ ${usd(t.firstYearNet)} net after investment`} accent />
+        <HeroStat label="Net gain / month" value={`+${usd(t.monthlyNet)}`} sub="after all costs — what you keep" accent />
+        <HeroStat label="Revenue recovered / mo" value={usd(t.monthlyImpact)} sub={`vs ${usd(t.monthly)}/mo cost`} accent />
         <HeroStat label="First-year ROI" value={`${t.roiMultiple}×`} sub={`${usd(t.annualImpact)} return vs ${usd(t.firstYearCost)} cost`} />
-        <HeroStat label="Payback" value={t.paybackMonths != null ? `${t.paybackMonths} mo` : "—"} sub="to earn back setup" />
+        <HeroStat label="Payback" value={t.paybackText} sub="to earn back setup" />
       </div>
 
       {/* Investment summary bar */}
@@ -171,7 +200,7 @@ export default function RoadmapView({ report: r, onBack, branding = null, waterm
                     <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>System {i + 1}</span>
                     <Tag color="#4a9eff">{s.category}</Tag>
                     <Tag color={EFFORT_COLOR[s.effort]}>{s.effort === "low" ? "Live in days" : s.effort === "medium" ? "1–2 week build" : "Premium build"}</Tag>
-                    {s.grounded && <Tag color="var(--green)">Audit-verified</Tag>}
+                    <Tag color="var(--green)">{s.roiMultiple}× ROI</Tag>
                   </div>
                   <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "Syne", marginBottom: 8 }}>{s.consumerName}</div>
                   {s.addressedWeaknesses.length > 0 && (
@@ -181,17 +210,18 @@ export default function RoadmapView({ report: r, onBack, branding = null, waterm
                   )}
                   <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6 }}>{s.solution}</div>
                 </div>
-                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                <div style={{ textAlign: "right", flexShrink: 0, maxWidth: 180 }}>
                   <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 2, letterSpacing: "0.06em" }}>RECOVERS / MONTH</div>
                   <div style={{ fontSize: 26, fontFamily: "Syne", fontWeight: 800, color: "var(--green)" }}>{usd(s.monthlyImpact)}</div>
+                  <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 4, lineHeight: 1.4 }}>{s.impactBasis}</div>
                 </div>
               </div>
               <div style={{ borderTop: "1px solid var(--border)", background: "var(--surface)", display: "grid", gridTemplateColumns: "repeat(4,1fr)" }}>
                 {[
                   ["Setup", usd(s.setup)],
                   ["Monthly", usd(s.monthly)],
-                  ["Payback", s.paybackMonths != null ? `${s.paybackMonths} mo` : "—"],
-                  ["1-yr ROI", `${s.roiMultiple}×`],
+                  ["Payback", s.paybackText],
+                  ["Net / mo", `+${usd(s.monthlyNet)}`],
                 ].map(([l, v], ci) => (
                   <div key={l} style={{ padding: "11px 16px", borderRight: ci < 3 ? "1px solid var(--border)" : "none" }}>
                     <div style={{ fontSize: 9, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 3 }}>{l}</div>
@@ -238,13 +268,13 @@ export default function RoadmapView({ report: r, onBack, branding = null, waterm
             <div style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 8, padding: 20 }}>
               <div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Total year-one investment</div>
               <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 30, color: "var(--text)" }}>{usd(t.firstYearCost)}</div>
-              <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 6, lineHeight: 1.6 }}>{usd(t.setup)} setup + {usd(t.monthly)}/mo × 12. Blended payback in {t.paybackMonths != null ? `${t.paybackMonths} months` : "—"}.</div>
+              <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 6, lineHeight: 1.6 }}>{usd(t.setup)} setup + {usd(t.monthly)}/mo × 12. Blended payback in {t.paybackText}.</div>
             </div>
           </div>
 
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, padding: "14px 18px" }}>
             <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.7 }}>
-              <strong style={{ color: "var(--text)" }}>How these numbers are built:</strong> every "recovers/month" figure is carried straight from this business's audit where the audit already modeled it, and otherwise estimated conservatively from your job value and volume. Setup and monthly fees are real catalog pricing. We confirm your actual numbers on the kickoff call before anything is signed.
+              <strong style={{ color: "var(--text)" }}>How these numbers are built:</strong> we estimate {rm.business.name}'s real economics — about {rm.economics.monthlyJobs} jobs/mo, ~{rm.economics.monthlyLeads} inbound leads/mo, a {usd(rm.economics.customerValue)} value per new customer, and industry leak rates — then apply each system to a <em>different</em> leak (missed calls, web leads, no-shows, reviews, quotes…) so nothing is double-counted. We only recommend a system when it clears <strong style={{ color: "var(--text)" }}>≥{`${3}`}× monthly ROI with payback under 6 months</strong>. Anything below that bar is listed as a future opportunity, not recommended. Confirmed against your real numbers on the kickoff call.
             </div>
           </div>
         </div>
@@ -302,9 +332,32 @@ export default function RoadmapView({ report: r, onBack, branding = null, waterm
         </div>
       )}
 
+      {/* Additional + future opportunities — honest, not recommended now */}
+      {(rm.additionalOpportunities.length > 0 || rm.futureOpportunities.length > 0 || rm.validateOpportunities.length > 0) && (
+        <div style={{ marginTop: 24 }}>
+          <div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
+            Future Opportunities <span style={{ textTransform: "none", letterSpacing: 0 }}>— not recommended yet (kept honest)</span>
+          </div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {rm.additionalOpportunities.map((s, i) => (
+              <div key={`a${i}`} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 8, padding: "11px 16px", flexWrap: "wrap" }}>
+                <div><span style={{ fontSize: 13, fontWeight: 600 }}>{s.consumerName}</span> <Tag color="var(--green)">also clears {s.roiMultiple}× ROI</Tag></div>
+                <span style={{ fontSize: 12, color: "var(--muted)" }}>{usd(s.monthlyImpact)}/mo · {usd(s.monthly)}/mo cost — add once the top 3 are live</span>
+              </div>
+            ))}
+            {[...rm.futureOpportunities, ...rm.validateOpportunities].map((f, i) => (
+              <div key={`f${i}`} style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 8, padding: "11px 16px" }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{f.consumerName}</div>
+                <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 3, lineHeight: 1.5 }}>{f.reason}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div style={{ marginTop: 32, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
         <p style={{ fontSize: 10, color: "var(--dim)", lineHeight: 1.6 }}>
-          All revenue figures are modeled from published industry benchmarks and the inputs captured in this business's audit. They are estimates, not guarantees. Setup and monthly fees reflect standard catalog pricing and are confirmed in writing at kickoff.
+          All figures are modeled conservatively from published industry benchmarks and this business's audit inputs, applying each system to a distinct revenue leak (no double-counting). We recommend only systems that clear a 3× monthly-ROI bar with payback under 6 months. Estimates, not guarantees; confirmed in writing at kickoff.
         </p>
       </div>
     </div>

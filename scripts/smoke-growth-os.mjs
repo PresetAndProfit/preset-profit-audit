@@ -38,12 +38,20 @@ const report = {
   ],
 };
 
-section("Roadmap engine");
+section("Roadmap engine + ROI gate");
 const rm = generateRoadmap(report);
-ok(rm && rm.solutions.length >= 3, "produces ≥3 matched solutions");
-ok(rm.totals.monthlyImpact > 0 && rm.totals.roiMultiple > 0, "computes positive monthly impact + ROI");
-ok(rm.bundle && rm.bundle.setup > 0, "recommends a priced bundle");
-ok(rm.proposal.problemSolution.length === rm.solutions.length, "1:1 gap→solution mapping (no padding)");
+ok(rm && rm.solutions.length > 0 && rm.solutions.length <= 3, "recommends at most the top 3 systems");
+ok(rm.solutions.every(s => s.roiMultiple >= 3), "every recommendation clears the 3× monthly-ROI gate");
+ok(rm.solutions.every(s => s.paybackMonths != null && s.paybackMonths < 6), "every recommendation pays back in under 6 months");
+ok(rm.solutions.every(s => s.monthlyNet > 0), "NO recommendation has cost ≥ recovered value (never negative)");
+ok(rm.totals.monthlyNet > 0, "total net monthly gain is positive");
+ok(rm.proposal.problemSolution.length === rm.solutions.length, "1:1 gap→solution mapping");
+// Trust gate on a low-ticket business: must NOT fabricate money-losing recommendations.
+const cheap = generateRoadmap({ id: "c", businessName: "Joe's Barbershop", industry: "Barbershop", goal: "More Leads",
+  overallScore: 60, leadFindings: [{ label: "No automatic follow-up when someone contacts you", status: "bad" }], websiteFindings: [],
+  assumptions: { avgJobValue: 32, monthlyJobs: 60, missedCallRate: 30, noShowRate: 20, industry: "Barbershop" }, automations: [] });
+ok(cheap.solutions.every(s => s.monthlyNet > 0), "low-ticket: any shown recommendation is still net-positive");
+ok(cheap.hasRecommendations === false || cheap.solutions.length > 0, "low-ticket: either honest no-recs or only gated recs");
 
 section("Outreach engine");
 const outNoLink = generateOutreach(report, { senderName: "Justin" });

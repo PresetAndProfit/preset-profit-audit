@@ -378,6 +378,36 @@ export const INDUSTRY_NO_SHOW_RATE = {
   Finance: 0.15, Education: 0.14, "Beauty & Salon": 0.23, Childcare: 0.06,
 };
 
+// ── Customer value & close rates — the realistic economics behind the proposal ──
+// INDUSTRY_LEAD_VALUE = the conservative dollar value of ONE newly-won customer.
+// This is NOT a single low-ticket transaction; for relationship/repeat businesses
+// it reflects a modest first-year value (LTV-lite), because the lead-gen systems
+// win a *customer*, not just one visit. Every figure is intentionally conservative
+// and defensible — under-stated rather than inflated.
+//   Dental: a new patient ≈ 4 visits/yr → ~$700 (not one $185 cleaning)
+//   Legal:  a signed case ≫ a $375 consult → $1,500 conservative
+//   Restaurant: a captured reservation/catering inquiry ≈ a party + repeat → ~$120 (not one $44 cover)
+//   Roofing/Real Estate: one-off high-ticket → the job/commission value itself
+export const INDUSTRY_LEAD_VALUE = {
+  Dental: 700, Chiropractic: 500, Plumbing: 350, Roofing: 2500,
+  HVAC: 600, Electrician: 320, Barbershop: 90, "Med Spa": 600,
+  Healthcare: 500, Legal: 1500, "Real Estate": 4800, "Home Services": 400,
+  Restaurant: 120, Automotive: 350, Retail: 150, Fitness: 400,
+  Finance: 1200, Education: 500, "Beauty & Salon": 200, Childcare: 2000,
+};
+
+// Lead → customer close rate. Used to derive monthly LEAD/inquiry volume from
+// monthly closed jobs (leads = jobs ÷ closeRate), because lead-capture systems act
+// on inquiries, not just closed jobs. Trades close lower; walk-in/transactional
+// businesses close higher; high-ticket considered purchases close lowest.
+export const INDUSTRY_CLOSE_RATE = {
+  Dental: 0.45, Chiropractic: 0.45, Plumbing: 0.32, Roofing: 0.28,
+  HVAC: 0.32, Electrician: 0.33, Barbershop: 0.55, "Med Spa": 0.40,
+  Healthcare: 0.45, Legal: 0.25, "Real Estate": 0.22, "Home Services": 0.33,
+  Restaurant: 0.55, Automotive: 0.45, Retail: 0.50, Fitness: 0.40,
+  Finance: 0.30, Education: 0.35, "Beauty & Salon": 0.50, Childcare: 0.40,
+};
+
 // Typical % of inbound calls that go unanswered per industry (decimal)
 export const INDUSTRY_MISSED_CALL_RATE = {
   Dental: 0.27, Chiropractic: 0.25, Plumbing: 0.40, Roofing: 0.42,

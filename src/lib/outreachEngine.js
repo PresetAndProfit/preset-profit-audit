@@ -20,6 +20,9 @@ function ground(report) {
   const topGap = top?.addressedWeaknesses?.[0]?.issue
     || (report.weaknesses && report.weaknesses[0]?.issue)
     || "leads slipping through the cracks before anyone follows up";
+  // Fall back to the audit's own modeled opportunity if no system clears the ROI
+  // gate (rare, low-ticket businesses) — never emit a fabricated or $0 figure.
+  const monthly = rm.totals.monthlyImpact || report.totalRev || 0;
   return {
     rm,
     biz: report.businessName,
@@ -27,15 +30,15 @@ function ground(report) {
     city: report.city || "",
     siteRef: report.siteRef || report.website || "your website",
     score: report.overallScore,
-    monthly: rm.totals.monthlyImpact,
-    annual: rm.totals.annualImpact,
+    monthly,
+    annual: monthly * 12,
     roi: rm.totals.roiMultiple,
     payback: rm.totals.paybackMonths,
     topFix: top ? top.consumerName : "automated follow-up",
-    topFixImpact: top ? top.monthlyImpact : rm.totals.monthlyImpact,
+    topFixImpact: top ? top.monthlyImpact : monthly,
     bundle: rm.bundle ? rm.bundle.name : null,
     topGap: String(topGap).replace(/\.$/, "").toLowerCase(),
-    nSystems: rm.solutions.length,
+    nSystems: Math.max(1, rm.solutions.length),
   };
 }
 

@@ -179,6 +179,59 @@ function reengagement(d = {}) {
   };
 }
 
+// Activation nudge sequence (Growth OS) — goes to the PROSPECT to convert an
+// audit into a booked call. 3 touches (immediate / 24h / 7d), each personalized
+// with the business name, audit score, revenue opportunity, and the operator's
+// booking link as the primary CTA (so a click is tracked and a call gets booked).
+// The operator explicitly arms this per-deal with a real prospect email + link.
+function activationNudge(d = {}, step = 0) {
+  const biz = d.businessName ? esc(d.businessName) : "your business";
+  const rev = d.revenueOpportunity ? esc(String(d.revenueOpportunity)) : null;
+  const score = Number.isFinite(d.score) ? `${d.score}/100` : null;
+  const book = d.bookingUrl || `${APP_URL}`;
+  const STEPS = [
+    {
+      subject: rev ? `${d.businessName || "Your business"}: we found ${d.revenueOpportunity} in monthly opportunity` : `Your audit for ${d.businessName || "your business"} is ready`,
+      preheader: "Here's what your audit found — and the fastest way to act on it.",
+      heading: "Here's what your audit found",
+      lead: `We ran an audit on <strong>${biz}</strong>${rev ? ` and found about <strong>${rev}</strong> in recoverable revenue every month` : ""}${score ? ` (current score: <strong>${score}</strong>)` : ""}.`,
+      body2: "The biggest gaps are quietly costing you customers. The fastest way to see the full plan and what it's worth is a quick 15-minute call.",
+      btn: "Book your 15-minute call",
+    },
+    {
+      subject: rev ? `Still leaving ${d.revenueOpportunity} on the table?` : `A quick follow-up on ${d.businessName || "your"} audit`,
+      preheader: "Every week these gaps stay open is money lost.",
+      heading: rev ? `${rev}/month is still on the table` : "Your audit is still waiting",
+      lead: `Yesterday we shared the audit for <strong>${biz}</strong>. ${rev ? `That ${rev}/month doesn't recover itself` : "Those gaps don't close themselves"} — every week costs more.`,
+      body2: "It takes 15 minutes to walk through exactly where the money is going and how we'd fix it for you. No pressure, no obligation.",
+      btn: "Grab a 15-minute slot",
+    },
+    {
+      subject: `Last note about ${d.businessName || "your"} audit`,
+      preheader: "Closing the loop — the offer's open whenever you are.",
+      heading: "Should I close your file?",
+      lead: `I haven't heard back, so I'll assume the timing isn't right for <strong>${biz}</strong> — totally understandable.`,
+      body2: `If you ever want to recover ${rev ? `that ${rev}/month` : "the revenue we found"}, the audit and the plan are ready whenever you are. One click books a time:`,
+      btn: "Book a call",
+    },
+  ];
+  const s = STEPS[step] || STEPS[0];
+  return {
+    subject: s.subject,
+    html: layout({
+      preheader: s.preheader,
+      body:
+        h(s.heading) +
+        hi(d.name) +
+        p(s.lead) +
+        p(s.body2) +
+        `<div style="margin:8px 0 20px">${button(book, s.btn)}</div>` +
+        p(`<span style="color:${COLOR.muted}">Prefer email? Just reply to this message.</span>`) +
+        (d.senderCompany ? p(`<span style="color:${COLOR.muted}">— ${esc(d.senderCompany)}</span>`) : ""),
+    }),
+  };
+}
+
 // Operator follow-up reminder (Growth OS CRM). Goes to the DEAL OWNER — never
 // the prospect — so the shared sending domain's reputation is never exposed to
 // cold outreach. It nudges the operator to work a due deal.
@@ -212,6 +265,9 @@ export const TEMPLATES = {
   subscription_cancelled:(d) => subscriptionCancelled(d),
   reengagement:          (d) => reengagement(d),
   followup_reminder:     (d) => followupReminder(d),
+  activation_immediate:  (d) => activationNudge(d, 0),
+  activation_24h:        (d) => activationNudge(d, 1),
+  activation_7d:         (d) => activationNudge(d, 2),
 };
 
 // Render a template by key. Throws on unknown key so a typo fails loudly in dev.

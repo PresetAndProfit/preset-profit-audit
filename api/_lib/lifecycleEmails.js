@@ -238,8 +238,93 @@ async function followupBatch() {
   return sent;
 }
 
+// ── Activation nudge sequence (Audit → Booked Call) ──────────────────────────
+// 3 prospect-facing touches (immediate via onActivationStart, then 24h + 7d via
+// the cron). Personalized from the deal's audit + the operator's booking link.
+// Idempotent per step (dedupe key); stops the moment the deal is booked/closed.
+const ACTIVATION_TEMPLATES = ["activation_immediate", "activation_24h", "activation_7d"];
+
+function activationDataFor(auditRow, profile) {
+  const data = auditRow.data || {};
+  return {
+    name: firstName(auditRow.contact_name),
+    businessName: auditRow.business_name || data.businessName || "your business",
+    score: Number.isFinite(data.overallScore) ? data.overallScore : null,
+    revenueOpportunity: data.revenueOpportunity || data.totalMonthlyOpportunity || null,
+    bookingUrl: profile?.calendar_url || null,
+    senderCompany: profile?.company_name || "Preset & Profit",
+  };
+}
+
+// Persist that a step was sent into the deal's crm.activation.sent (client-
+// readable, so the CRM can show "sent N/3" without reading the service-role log).
+async function recordActivationSent(auditId, step) {
+  try {
+    const { data: row } = await supabaseAdmin.from("audits").select("crm").eq("id", auditId).maybeSingle();
+    const crm = row?.crm || {};
+    const activation = crm.activation || {};
+    activation.sent = { ...(activation.sent || {}), [String(step)]: new Date().toISOString() };
+    await supabaseAdmin.from("audits").update({ crm: { ...crm, activation } }).eq("id", auditId);
+  } catch { /* best-effort */ }
+}
+
+async function sendActivationStep(auditRow, profile, step) {
+  const to = auditRow.contact_email;
+  const bookingUrl = profile?.calendar_url;
+  if (!to || !bookingUrl) return { ok: false, skipped: true }; // can't drive a booking
+  const res = await sendLifecycleEmail({
+    to,
+    template: ACTIVATION_TEMPLATES[step],
+    userId: auditRow.user_id,
+    dedupeKey: `activation:${auditRow.id}:${step}`,
+    data: activationDataFor(auditRow, profile),
+  });
+  if (res.ok && !res.skipped) await recordActivationSent(auditRow.id, step);
+  return res;
+}
+
+// Immediate touch — fired from api/audits/create.js when the operator arms the
+// sequence on a deal.
+export async function onActivationStart(auditRow, profile) {
+  try { return await sendActivationStep(auditRow, profile, 0); }
+  catch { return { ok: false }; }
+}
+
+// Cron pass: send the 24h and 7d reminders for armed, unbooked, open deals.
+async function activationBatch() {
+  const { data: rows } = await supabaseAdmin
+    .from("audits")
+    .select("id, user_id, business_name, contact_email, contact_name, data, crm, stage")
+    .eq("crm->activation->>enabled", "true")
+    .limit(200);
+  const list = rows || [];
+  if (!list.length) return 0;
+  const profById = {};
+  const userIds = [...new Set(list.map((r) => r.user_id))];
+  try {
+    const { data: profs } = await supabaseAdmin.from("profiles").select("id, calendar_url, company_name").in("id", userIds);
+    for (const p of profs || []) profById[p.id] = p;
+  } catch { /* ignore */ }
+  const now = Date.now();
+  let sent = 0;
+  for (const r of list) {
+    const act = r.crm?.activation || {};
+    if (act.booked) continue;
+    if (r.stage === "closed_won" || r.stage === "closed_lost") continue;
+    const profile = profById[r.user_id];
+    if (!profile?.calendar_url || !r.contact_email) continue;
+    const ageH = (now - new Date(act.startedAt || now).getTime()) / HOUR;
+    const sentMap = act.sent || {};
+    let res = null;
+    if (ageH >= 168 && sentMap["2"] == null) res = await sendActivationStep(r, profile, 2);
+    else if (ageH >= 24 && sentMap["1"] == null) res = await sendActivationStep(r, profile, 1);
+    if (res?.ok && !res.skipped) sent++;
+  }
+  return sent;
+}
+
 export async function runDailySweep() {
-  const counts = { trial_ending_3d: 0, trial_ending_1d: 0, reengagement: 0, followup_reminder: 0 };
+  const counts = { trial_ending_3d: 0, trial_ending_1d: 0, reengagement: 0, followup_reminder: 0, activation: 0 };
   const now = Date.now();
 
   // Trial ending in ~3 days (48–72h out) and ~1 day (0–24h out).
@@ -248,6 +333,9 @@ export async function runDailySweep() {
 
   // CRM: operator follow-up reminders for due deals.
   try { counts.followup_reminder = await followupBatch(); } catch { /* ignore */ }
+
+  // CRM: activation nudge reminders (24h + 7d) driving Audit → Booked Call.
+  try { counts.activation = await activationBatch(); } catch { /* ignore */ }
 
   // Re-engagement: free-plan users who joined >30d ago and have no audit in the
   // last 30 days. Reuses the admin_usage_overview view (plan + last_audit_at).

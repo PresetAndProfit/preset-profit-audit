@@ -70,7 +70,7 @@ async function applyDeliveryEvent(event) {
   if (!m || !messageId) return; // ignore unrelated events (e.g. delivery_delayed)
   const { data: row } = await supabaseAdmin
     .from("email_log")
-    .select("id, status")
+    .select("id, status, dedupe_key")
     .eq("provider_message_id", messageId)
     .maybeSingle();
   if (!row) return;
@@ -78,6 +78,25 @@ async function applyDeliveryEvent(event) {
   if (m.at) patch[m.at] = new Date().toISOString();
   if (m.terminal || (RANK[m.status] ?? 99) > (RANK[row.status] ?? -1)) patch.status = m.status;
   if (Object.keys(patch).length) await supabaseAdmin.from("email_log").update(patch).eq("id", row.id);
+
+  // Activation nudge tracking: mirror opens/clicks back onto the deal so the CRM
+  // can show per-deal engagement (email_log is service-role only). The dedupe
+  // key carries the auditId + step: 'activation:<auditId>:<step>'.
+  if (row.dedupe_key && row.dedupe_key.startsWith("activation:") && (type === "email.opened" || type === "email.clicked")) {
+    const [, auditId, step] = row.dedupe_key.split(":");
+    const field = type === "email.clicked" ? "clicked" : "opened";
+    if (auditId && step != null) {
+      try {
+        const { data: a } = await supabaseAdmin.from("audits").select("crm").eq("id", auditId).maybeSingle();
+        if (a) {
+          const crm = a.crm || {};
+          const act = crm.activation || {};
+          act[field] = { ...(act[field] || {}), [String(step)]: new Date().toISOString() };
+          await supabaseAdmin.from("audits").update({ crm: { ...crm, activation: act } }).eq("id", auditId);
+        }
+      } catch { /* best-effort */ }
+    }
+  }
 }
 
 export default async function handler(req, res) {

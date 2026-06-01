@@ -8,7 +8,7 @@ import { supabaseAdmin, getUserFromRequest } from "../_lib/supabaseAdmin.js";
 import { assertCanCreateAudit, enforceAuditLimitForClient, logUsageEvent } from "../_lib/usageServer.js";
 import { isDisabled } from "../_lib/systemSettings.js";
 import { isAdminEmail } from "../_lib/adminAuth.js";
-import { onAuditComplete } from "../_lib/lifecycleEmails.js";
+import { onAuditComplete, onActivationStart } from "../_lib/lifecycleEmails.js";
 import { effectivePlan } from "../../src/lib/plans.js";
 import { STAGE_KEYS } from "../../src/lib/dealEngine.js";
 
@@ -74,6 +74,46 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     } catch (e) {
       console.error("[audits/create] deal_update", e);
+      return res.status(500).json({ error: "server-error" });
+    }
+  }
+
+  // ── Arm the activation nudge sequence on a deal ───────────────────────────
+  // Operator-initiated, user-scoped. Requires a real prospect email AND the
+  // operator's booking link (you can't run a "book a call" sequence without a
+  // link) — so we never send unsolicited bulk mail with a dead CTA. Sets
+  // crm.activation and fires the immediate touch; the cron handles 24h + 7d.
+  if (body.op === "activation_start") {
+    const clientId = body.clientId != null ? String(body.clientId) : "";
+    if (!clientId) return res.status(400).json({ error: "invalid-request" });
+    try {
+      const { data: row } = await supabaseAdmin
+        .from("audits")
+        .select("id, user_id, business_name, contact_email, contact_name, data, crm, stage")
+        .eq("user_id", user.id)
+        .eq("client_id", clientId)
+        .maybeSingle();
+      if (!row) return res.status(404).json({ error: "deal-not-found" });
+      if (!row.contact_email) return res.status(400).json({ error: "missing-contact-email" });
+      const { data: profile } = await supabaseAdmin
+        .from("profiles").select("calendar_url, company_name").eq("id", user.id).maybeSingle();
+      if (!profile?.calendar_url) return res.status(400).json({ error: "missing-booking-link" });
+
+      const crm = row.crm || {};
+      const activation = {
+        ...(crm.activation || {}),
+        enabled: true,
+        startedAt: crm.activation?.startedAt || new Date().toISOString(),
+        booked: false,
+      };
+      const newCrm = { ...crm, activation };
+      await supabaseAdmin.from("audits").update({ crm: newCrm }).eq("id", row.id);
+      // Fire the immediate touch (best-effort; never fails the arm action).
+      try { await onActivationStart({ ...row, crm: newCrm }, profile); }
+      catch (e) { console.error("[activation_start] send", e); }
+      return res.status(200).json({ ok: true });
+    } catch (e) {
+      console.error("[activation_start]", e);
       return res.status(500).json({ error: "server-error" });
     }
   }

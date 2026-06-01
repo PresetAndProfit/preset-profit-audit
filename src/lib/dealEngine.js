@@ -87,3 +87,32 @@ export function pipelineAggregates(audits = []) {
 export function isFollowupDue(audit, now = Date.now()) {
   return !!audit?.next_action_at && new Date(audit.next_action_at).getTime() <= now && !isClosed(deriveStage(audit));
 }
+
+// Per-deal activation status (from crm.activation written by the send pipeline +
+// the Resend webhook). Counts of emails sent/opened/clicked for this deal.
+export function dealActivation(audit) {
+  const act = audit?.crm?.activation;
+  if (!act?.enabled) return null;
+  const count = m => (m && typeof m === "object" ? Object.keys(m).length : 0);
+  return {
+    enabled: true,
+    startedAt: act.startedAt || null,
+    booked: !!act.booked,
+    sent: count(act.sent),
+    opened: count(act.opened),
+    clicked: count(act.clicked),
+  };
+}
+
+// Aggregate activation funnel across all deals — surfaced in the CRM header so
+// the operator sees Audit→Booked-Call conversion at a glance.
+export function activationMetrics(audits = []) {
+  const t = { active: 0, sent: 0, opened: 0, clicked: 0, booked: 0 };
+  for (const a of audits) {
+    const d = dealActivation(a);
+    if (!d) continue;
+    t.active++; t.sent += d.sent; t.opened += d.opened; t.clicked += d.clicked;
+    if (d.booked) t.booked++;
+  }
+  return t;
+}

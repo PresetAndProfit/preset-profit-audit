@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Btn, Tag, ScoreRing } from "./ui/index.jsx";
-import { STAGES, deriveStage, stageColor, stageLabel, isClosed } from "../lib/dealEngine.js";
+import { STAGES, deriveStage, stageColor, stageLabel, isClosed, dealActivation } from "../lib/dealEngine.js";
 import { setStage, appendNote, appendActivity } from "../lib/pipeline.js";
 import { timeAgo } from "../lib/helpers.js";
 import DealUpsell from "./DealUpsell.jsx";
@@ -15,12 +15,14 @@ const toLocalInput = iso => {
 
 // Side panel for working ONE deal: contact, stage, follow-up scheduling, notes,
 // activity log, jump-to-engine links, and the close-time automation upsell.
-export default function DealDrawer({ deal, updateDeal, onClose, onViewReport, onViewRoadmap, onViewOutreach, onDeleteAudit }) {
+export default function DealDrawer({ deal, updateDeal, onClose, onViewReport, onViewRoadmap, onViewOutreach, onDeleteAudit, onStartActivation }) {
   const [email, setEmail] = useState(deal.contact_email || "");
   const [name, setName] = useState(deal.contact_name || "");
   const [note, setNote] = useState("");
   const [when, setWhen] = useState(toLocalInput(deal.next_action_at));
   const [busy, setBusy] = useState(false);
+  const [seqBusy, setSeqBusy] = useState(false);
+  const [seqErr, setSeqErr] = useState("");
 
   const stage = deriveStage(deal);
   const crm = deal.crm || {};
@@ -29,12 +31,30 @@ export default function DealDrawer({ deal, updateDeal, onClose, onViewReport, on
 
   const persist = async patch => { setBusy(true); try { await updateDeal(deal.id, patch); } finally { setBusy(false); } };
 
-  // Booked call = the funnel's money event. Log it and pull the deal into the
-  // active "follow-up" working stage (never downgrading a closed deal).
-  const markCallBooked = () => persist({
-    stage: isClosed(stage) ? stage : "followup",
-    crm: appendActivity(crm, "call", "📞 Call booked"),
-  });
+  // Booked call = the funnel's money event. Log it, pull the deal into the
+  // active "follow-up" stage, and STOP the activation sequence (mark booked).
+  const markCallBooked = () => {
+    const base = crm.activation ? { ...crm, activation: { ...crm.activation, booked: true } } : crm;
+    return persist({
+      stage: isClosed(stage) ? stage : "followup",
+      crm: appendActivity(base, "call", "📞 Call booked"),
+    });
+  };
+
+  const act = dealActivation(deal);
+  const startSeq = async () => {
+    if (!onStartActivation) return;
+    setSeqErr(""); setSeqBusy(true);
+    const r = await onStartActivation(deal);
+    setSeqBusy(false);
+    if (!r?.ok) {
+      setSeqErr(
+        r?.error === "missing-booking-link" ? "Set your booking link in Account → Booking & outreach identity first."
+        : r?.error === "missing-contact-email" ? "Add the prospect's email above and save first."
+        : "Couldn't start the sequence. Try again."
+      );
+    }
+  };
 
   const saveContact = () => persist({ contact_email: email || null, contact_name: name || null });
   const changeStage = e => setStage(updateDeal, deal, e.target.value);
@@ -107,6 +127,37 @@ export default function DealDrawer({ deal, updateDeal, onClose, onViewReport, on
             {deal.next_action_at && (
               <div style={{ fontSize: 11, color: new Date(deal.next_action_at) <= new Date() ? "var(--red)" : "var(--muted)", marginTop: 6 }}>
                 {new Date(deal.next_action_at) <= new Date() ? "⏰ Due " : "Scheduled "}{new Date(deal.next_action_at).toLocaleString()}
+              </div>
+            )}
+          </Section>
+
+          {/* Activation nudge sequence — Audit → Booked Call */}
+          <Section label="Activation Sequence">
+            {!act ? (
+              <>
+                <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.6, marginBottom: 8 }}>
+                  Auto-nudge {email || "the prospect"} until they book: an immediate email, then 24-hour and 7-day reminders — each with their audit numbers and your booking link. Stops the moment a call is booked.
+                </div>
+                <Btn small variant="primary" disabled={seqBusy || !deal.contact_email} onClick={startSeq}>
+                  {seqBusy ? "Starting…" : "▶ Start activation sequence"}
+                </Btn>
+                {!deal.contact_email && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>Add the prospect's email above first.</div>}
+                {seqErr && <div style={{ fontSize: 11, color: "var(--red)", marginTop: 6 }}>{seqErr}</div>}
+              </>
+            ) : (
+              <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, padding: "12px 14px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: act.booked ? "var(--green)" : "var(--amber)" }}>
+                    {act.booked ? "✅ Call booked — sequence stopped" : "● Sequence active"}
+                  </span>
+                  <span style={{ fontSize: 10, color: "var(--muted)" }}>{act.sent}/3 sent</span>
+                </div>
+                <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 11, color: "var(--muted)" }}>
+                  <span>📤 Sent <strong style={{ color: "var(--text)" }}>{act.sent}</strong></span>
+                  <span>👁 Opened <strong style={{ color: "var(--text)" }}>{act.opened}</strong></span>
+                  <span>🔗 Clicked <strong style={{ color: act.clicked ? "var(--green)" : "var(--text)" }}>{act.clicked}</strong></span>
+                  <span>📞 Booked <strong style={{ color: act.booked ? "var(--green)" : "var(--text)" }}>{act.booked ? "Yes" : "No"}</strong></span>
+                </div>
               </div>
             )}
           </Section>

@@ -119,5 +119,20 @@ export function useAudits() {
     return { ok: true };
   }, [userId, refresh]);
 
-  return { audits, loading, save, remove, refresh, updateDeal };
+  // Arm the activation nudge sequence on a deal (server validates contact email
+  // + booking link, then fires the immediate touch). Optimistic enable.
+  const startActivation = useCallback(async (clientId) => {
+    if (!userId) return { ok: false, error: "not-signed-in" };
+    const { ok, status, json } = await authedJson("/api/audits/create", {
+      body: { op: "activation_start", clientId: String(clientId) },
+    });
+    if (ok) {
+      setAudits((prev) => prev.map((a) => (String(a.id) === String(clientId)
+        ? { ...a, crm: { ...(a.crm || {}), activation: { ...((a.crm && a.crm.activation) || {}), enabled: true, startedAt: (a.crm?.activation?.startedAt) || new Date().toISOString(), booked: false } } }
+        : a)));
+    }
+    return { ok, error: ok ? null : (json?.error || `activation-${status}`), status };
+  }, [userId]);
+
+  return { audits, loading, save, remove, refresh, updateDeal, startActivation };
 }

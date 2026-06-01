@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { Tag } from "./ui/index.jsx";
-import { STAGES, deriveStage, pipelineAggregates, isFollowupDue, isClosed } from "../lib/dealEngine.js";
+import { STAGES, deriveStage, pipelineAggregates, isFollowupDue, isClosed, activationMetrics } from "../lib/dealEngine.js";
 import { setStage } from "../lib/pipeline.js";
 import { timeAgo } from "../lib/helpers.js";
 import DealDrawer from "./DealDrawer.jsx";
@@ -10,10 +10,11 @@ const fmtMoney = cents => `$${Math.round((cents || 0) / 100).toLocaleString()}`;
 // The unified pipeline. Every audit is a Deal card living in a stage column;
 // the operator works them left→right to Closed Won → Automation Sold. Replaces
 // the read-only hot/warm/cold LeadsView with a worked sales board.
-export default function PipelineBoard({ audits, updateDeal, onViewReport, onViewRoadmap, onViewOutreach, onDeleteAudit }) {
+export default function PipelineBoard({ audits, updateDeal, onViewReport, onViewRoadmap, onViewOutreach, onDeleteAudit, onStartActivation }) {
   const [selected, setSelected] = useState(null);
 
   const agg = useMemo(() => pipelineAggregates(audits), [audits]);
+  const actm = useMemo(() => activationMetrics(audits), [audits]);
   const grouped = useMemo(() => {
     const g = Object.fromEntries(STAGES.map(s => [s.key, []]));
     for (const a of audits) (g[deriveStage(a)] ||= []).push(a);
@@ -43,6 +44,19 @@ export default function PipelineBoard({ audits, updateDeal, onViewReport, onView
         {stat("Win rate", `${agg.winRate}%`)}
         {agg.dueFollowups > 0 && stat("⏰ Due now", agg.dueFollowups, "var(--red)")}
       </div>
+
+      {/* Activation funnel — Audit → Booked Call at a glance */}
+      {actm.active > 0 && (
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center", background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 8, padding: "10px 16px", marginBottom: 12, fontSize: 12, color: "var(--muted)" }}>
+          <span style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--amber)" }}>Activation funnel</span>
+          <span>🎯 Active <strong style={{ color: "var(--text)" }}>{actm.active}</strong></span>
+          <span>📤 Sent <strong style={{ color: "var(--text)" }}>{actm.sent}</strong></span>
+          <span>👁 Opened <strong style={{ color: "var(--text)" }}>{actm.opened}</strong></span>
+          <span>🔗 Clicked <strong style={{ color: "var(--text)" }}>{actm.clicked}</strong></span>
+          <span>📞 Booked <strong style={{ color: "var(--green)" }}>{actm.booked}</strong></span>
+          {actm.sent > 0 && <span style={{ marginLeft: "auto" }}>Book rate <strong style={{ color: "var(--green)" }}>{Math.round((actm.booked / actm.active) * 100)}%</strong></span>}
+        </div>
+      )}
 
       {audits.length === 0 && (
         <div style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 8, padding: "60px 24px", textAlign: "center", marginTop: 16 }}>
@@ -112,6 +126,7 @@ export default function PipelineBoard({ audits, updateDeal, onViewReport, onView
           onViewRoadmap={onViewRoadmap}
           onViewOutreach={onViewOutreach}
           onDeleteAudit={onDeleteAudit}
+          onStartActivation={onStartActivation}
         />
       )}
     </div>

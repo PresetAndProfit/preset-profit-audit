@@ -31,7 +31,7 @@ function Block({ title, meta, text, children }) {
 // Renders the generated outreach for a Deal, lets the operator copy each asset,
 // persists a summary to the Deal (advancing stage → Outreach), and schedules the
 // first follow-up. The actual copy is re-derivable, so we store only a summary.
-export default function OutreachView({ report: deal, updateDeal, onBack, branding = null, cta = null }) {
+export default function OutreachView({ report: deal, updateDeal, onBack, branding = null, cta = null, onStartActivation = null }) {
   const senderCompany = cta?.senderCompany || branding?.name || "Preset & Profit";
   const senderName = cta?.senderName || "";
   const calendarUrl = cta?.calendarUrl || "";
@@ -40,6 +40,13 @@ export default function OutreachView({ report: deal, updateDeal, onBack, brandin
     [deal, senderCompany, senderName, calendarUrl]
   );
   const [saved, setSaved] = useState(!!deal.crm?.outreach);
+  const [seq, setSeq] = useState(deal.crm?.activation?.enabled ? "on" : "");
+  const startSeq = async () => {
+    if (!onStartActivation) return;
+    setSeq("busy");
+    const r = await onStartActivation(deal);
+    setSeq(r?.ok ? "on" : (r?.error || "err"));
+  };
 
   if (!out) return null;
   const h = out.headline;
@@ -69,9 +76,26 @@ export default function OutreachView({ report: deal, updateDeal, onBack, brandin
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Btn variant="ghost" onClick={scheduleFollowup}>⏰ Schedule follow-up</Btn>
-          <Btn variant={saved ? "success" : "primary"} onClick={saveToDeal}>{saved ? "✓ Saved to deal" : "Save to deal →"}</Btn>
+          <Btn variant={saved ? "success" : "ghost"} onClick={saveToDeal}>{saved ? "✓ Saved to deal" : "Save to deal"}</Btn>
+          {onStartActivation && (
+            <Btn variant={seq === "on" ? "success" : "primary"} disabled={seq === "busy" || seq === "on" || !deal.contact_email} onClick={startSeq}>
+              {seq === "on" ? "✓ Sequence running" : seq === "busy" ? "Starting…" : "▶ Auto-send sequence"}
+            </Btn>
+          )}
         </div>
       </div>
+
+      {/* Sequence status / gating hints */}
+      {onStartActivation && seq !== "on" && (
+        <div style={{ fontSize: 11, color: seq && seq !== "busy" ? "var(--red)" : "var(--muted)", marginBottom: 12 }}>
+          {!deal.contact_email
+            ? "Add the prospect's email on the deal to auto-send this sequence (immediate + 24h + 7d)."
+            : seq === "missing-booking-link" ? "Set your booking link in Account → Booking & outreach identity, then start the sequence."
+            : seq === "missing-contact-email" ? "Add the prospect's email on the deal first."
+            : seq && seq !== "busy" ? "Couldn't start the sequence — try again."
+            : "Auto-send arms a 3-touch sequence to this prospect that stops the moment they book."}
+        </div>
+      )}
 
       {/* Booking-link nudge — embeds a real CTA into the copy */}
       {!calendarUrl && (

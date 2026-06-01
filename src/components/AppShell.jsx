@@ -74,7 +74,7 @@ function MaintenanceScreen({ onSignOut }) {
 
 export default function AppShell() {
   const { user, profile, plan, subscription, signOut } = useAuth();
-  const { audits, save, remove, updateDeal } = useAudits();
+  const { audits, save, remove, updateDeal, startActivation } = useAudits();
 
   // Admin = profile flag OR the owner email (mirrors the server allowlist).
   const isAdmin = !!profile?.is_admin || (user?.email || "").toLowerCase() === "justin@presetprofit.com";
@@ -307,6 +307,7 @@ export default function AppShell() {
             branding={branding}
             updateDeal={updateDeal}
             cta={cta}
+            onStartActivation={startActivation}
           />
         )}
 
@@ -318,6 +319,7 @@ export default function AppShell() {
             onViewRoadmap={openRoadmapFor}
             onViewOutreach={openOutreachFor}
             onDeleteAudit={handleDeleteAudit}
+            onStartActivation={startActivation}
           />
         )}
 

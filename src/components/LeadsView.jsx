@@ -1,5 +1,4 @@
 import { Tag, Btn } from "./ui/index.jsx";
-import { STATUS_COLORS } from "../lib/constants.js";
 import { timeAgo } from "../lib/helpers.js";
 
 export default function LeadsView({ audits, onViewReport, onDeleteAudit }) {

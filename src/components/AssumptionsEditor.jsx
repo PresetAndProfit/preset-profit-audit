@@ -110,7 +110,6 @@ export default function AssumptionsEditor({ assumptions, benchmarks: benchmarksP
   // Original engine values. Falls back to live values only if no benchmark was
   // passed (keeps the editor functional rather than crashing).
   const benchmarks = benchmarksProp || assumptions;
-  const anyChanged = sliders.some(s => assumptions[s.key] !== benchmarks[s.key]);
 
   // Calculate the diff arrow
   const diff = liveTotal - benchmarkTotal;

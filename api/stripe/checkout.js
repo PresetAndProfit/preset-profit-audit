@@ -121,10 +121,23 @@ export default async function handler(req, res) {
       customer: customerId,
       line_items: [{ price: priceId, quantity: 1 }],
       client_reference_id: user.id,
+      // Checkout UX: pin card as the one, unambiguous payment method. Stripe is
+      // our only processor, and leaving the method list to Stripe surfaces the
+      // Link auto-prompt first, which confuses first-time users. Card-only keeps
+      // the form simple and trustworthy. (Link can be re-enabled here or via the
+      // Stripe Dashboard later without touching billing logic.)
+      payment_method_types: ["card"],
+      // Trust messaging shown directly above the pay button.
+      custom_text: {
+        submit: { message: "Secure payments powered by Stripe · Cancel anytime · No contracts · Your data is protected." },
+      },
       subscription_data: {
         metadata: { supabase_user_id: user.id },
         ...(plan.trialDays && !hadPriorSubscription ? { trial_period_days: plan.trialDays } : {}),
       },
+      // Promo codes: customers can enter any active Stripe coupon/promotion code
+      // at checkout. Manage launch coupons in the Stripe Dashboard (or extend
+      // scripts/setup-stripe.js) — no code change needed to run a promotion.
       allow_promotion_codes: true,
       success_url: `${APP_URL}/?checkout=success&plan=${plan.id}`,
       cancel_url: `${APP_URL}/?checkout=cancel`,

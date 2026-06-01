@@ -62,7 +62,8 @@ async function activity({ limit = 40 } = {}) {
 // ── USER MANAGEMENT ──────────────────────────────────────────────────────────
 async function users({ q = "", limit = 100 } = {}) {
   let query = supabaseAdmin.from("admin_usage_overview").select("*").order("joined_at", { ascending: false }).limit(limit);
-  if (q.trim()) query = query.ilike("email", `%${q.trim()}%`);
+  const term = q.trim().replace(/[,()%*]/g, "");
+  if (term) query = query.ilike("email", `%${term}%`);
   const { data, error } = await query;
   if (error) throw error;
   return data || [];
@@ -112,7 +113,10 @@ async function userAction({ userId, op, plan }, admin) {
 // ── AUDIT DATABASE ───────────────────────────────────────────────────────────
 async function audits({ q = "", plan = "", limit = 100 } = {}) {
   let query = supabaseAdmin.from("audits").select("id, user_id, business_name, url, overall_score, created_at").order("created_at", { ascending: false }).limit(limit);
-  if (q.trim()) query = query.or(`business_name.ilike.%${q.trim()}%,url.ilike.%${q.trim()}%`);
+  // Strip PostgREST-reserved characters so a stray comma/paren/percent can't
+  // break or inject into the .or() filter expression.
+  const term = q.trim().replace(/[,()%*]/g, "");
+  if (term) query = query.or(`business_name.ilike.%${term}%,url.ilike.%${term}%`);
   const { data: rows, error } = await query;
   if (error) throw error;
   const userIds = [...new Set((rows || []).map((r) => r.user_id))];

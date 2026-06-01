@@ -10,6 +10,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
+    "smoke": "node scripts/smoke-growth-os.mjs",
     "preview": "vite preview",
     "setup:stripe": "node scripts/setup-stripe.js"
   },

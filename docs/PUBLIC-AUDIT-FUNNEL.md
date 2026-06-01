@@ -1,7 +1,12 @@
-# Public Instant Audit Funnel — Architecture & Plan (DRAFT, not yet implemented)
+# Public Instant Audit Funnel — Architecture & Plan
 
-> Status: **design only.** No implementation until this is reviewed/approved.
-> Prereq: Growth OS (`feature/growth-os`) deployed and its live smoke test passed.
+> Status: **Phase A IMPLEMENTED** on `feature/growth-os` (locked decisions:
+> auto-create Deal = yes · activation = operator-triggered · bots = honeypot +
+> rate-limit · delivery = V1). Routes through `send-report.js` (`public_audit` +
+> `public_lead`), `/audit` React route, `public_audit_summary` email — 12/12
+> functions held. Deploy steps in `DEPLOY-GROWTH-OS.md` §2/§6. Phase B/C below
+> remain future work.
+> Prereq: Growth OS deployed; set `FUNNEL_OWNER_USER_ID` + owner booking link.
 
 ## 1. Objective & non-goals
 Top-of-funnel acquisition: a public, no-login page where a business submits its

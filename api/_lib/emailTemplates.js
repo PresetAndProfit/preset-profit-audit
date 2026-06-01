@@ -232,6 +232,31 @@ function activationNudge(d = {}, step = 0) {
   };
 }
 
+// Public funnel — audit summary to the PROSPECT after they submit their email on
+// the free public audit. Their results + top gaps + a book-a-call CTA (the funnel
+// owner's booking link). Soft opt-in: they submitted their email for this report.
+function publicAuditSummary(d = {}) {
+  const biz = d.businessName ? esc(d.businessName) : "your business";
+  const rev = d.revenueOpportunity ? esc(String(d.revenueOpportunity)) : null;
+  const score = Number.isFinite(d.score) ? `${d.score}/100` : null;
+  const findings = Array.isArray(d.findings) ? d.findings.slice(0, 3) : [];
+  const book = d.bookingUrl || APP_URL;
+  return {
+    subject: rev ? `${d.businessName || "Your"} audit: ${d.revenueOpportunity} in monthly opportunity` : `Your free audit for ${d.businessName || "your business"}`,
+    html: layout({
+      preheader: "Your audit results + the fastest fixes.",
+      body:
+        h(`Your audit for ${biz}`) +
+        p(`Here's the snapshot from your free audit${score ? `. Overall score: <strong>${esc(score)}</strong>` : ""}.`) +
+        (rev ? p(`We estimate <strong>${rev}</strong> in recoverable revenue every month from the gaps we found.`) : "") +
+        (findings.length ? `<ul style="margin:0 0 16px;padding-left:20px;color:${COLOR.text}">${findings.map((f) => `<li style="margin-bottom:6px">${esc(f)}</li>`).join("")}</ul>` : "") +
+        p("The fastest way to turn this into booked customers is a quick 15-minute call — we'll walk you through the plan and exactly what it's worth.") +
+        `<div style="margin:8px 0 20px">${button(book, "Book your 15-minute call")}</div>` +
+        (d.senderCompany ? p(`<span style="color:${COLOR.muted}">— ${esc(d.senderCompany)}</span>`) : ""),
+    }),
+  };
+}
+
 // Operator follow-up reminder (Growth OS CRM). Goes to the DEAL OWNER — never
 // the prospect — so the shared sending domain's reputation is never exposed to
 // cold outreach. It nudges the operator to work a due deal.
@@ -268,6 +293,7 @@ export const TEMPLATES = {
   activation_immediate:  (d) => activationNudge(d, 0),
   activation_24h:        (d) => activationNudge(d, 1),
   activation_7d:         (d) => activationNudge(d, 2),
+  public_audit_summary:  (d) => publicAuditSummary(d),
 };
 
 // Render a template by key. Throws on unknown key so a typo fails loudly in dev.

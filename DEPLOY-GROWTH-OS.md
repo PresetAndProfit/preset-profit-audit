@@ -60,9 +60,19 @@ Already required (confirm present):
 - `RESEND_API_KEY`, `RESEND_FROM` (`Preset & Profit <notifications@presetprofit.com>`), `RESEND_WEBHOOK_SECRET`
 - `CRON_SECRET`, `APP_URL`
 
-New behavior on existing vars (no new vars required):
+New behavior on existing vars:
 - **Resend → enable click tracking** on the sending domain. Without it, the
   "🔗 Clicked booking link" CRM metric stays 0 (sends + opens still work).
+
+New vars for the **Public Instant Audit Funnel** (`/audit`):
+- `FUNNEL_OWNER_USER_ID` — **required to enable the funnel.** The Supabase auth
+  user id that public leads/deals attach to (Justin's account; must be a REAL
+  auth.users id and should be on a paid/unlimited plan). If unset, `/audit`
+  returns "temporarily unavailable" (no breakage).
+- `PUBLIC_FUNNEL_SECRET` — optional HMAC secret for the scan→capture token; falls
+  back to `CRON_SECRET` if unset.
+- Set the funnel owner's **booking link** (Account → Booking & outreach identity)
+  so the public CTA + summary email point at a real calendar.
 
 ---
 
@@ -120,6 +130,22 @@ functions deploy (no new ones).
    banner → *Go Unlimited* → redirects to Stripe Checkout for Professional.
 
 If all 7 pass, the funnel is live end-to-end.
+
+### Public funnel smoke (after setting `FUNNEL_OWNER_USER_ID` + owner booking link)
+8. Visit **`/audit`** (logged out). Enter a real business website + industry →
+   *Get My Free Audit* → teaser shows scores + revenue leak + 2 gaps (rest locked).
+9. Enter a **business email you control** → *Unlock Full Audit* → full report shows;
+   a **summary email arrives** with the booking-link CTA.
+10. In the app (as the funnel owner) → **Sales Pipeline** shows a new Deal at stage
+    *Audited*, tagged inbound, with that prospect's email — ready for roadmap →
+    proposal → activation. (Confirms public → CRM hand-off.)
+11. Re-submit the same site/email → **no duplicate Deal** (dedupe by URL).
+12. Abuse checks: rapid repeat scans from one IP get `429` after the per-IP cap;
+    a `mailinator.com` email is rejected at the gate.
+
+> **SEO:** ensure `/audit` is crawlable (it's the lead-gen surface) — add it to
+> the sitemap / link it from the marketing site. The page is a public SPA route
+> (served by the existing `/*` rewrite).
 
 ---
 

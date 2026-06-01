@@ -86,6 +86,13 @@ for (const k of actKeys) {
 }
 const keys = [0, 1, 2].map((s) => `activation:AUDIT123:${s}`);
 ok(new Set(keys).size === 3, "dedupe keys unique per step (no duplicate sends)");
+section("Public audit funnel");
+ok(!!TEMPLATES.public_audit_summary, "public_audit_summary template registered");
+const ps = renderTemplate("public_audit_summary", { businessName: "Summit Air HVAC", score: 61, revenueOpportunity: "$4,250/month", bookingUrl: "https://calendly.com/justin/15min", senderCompany: "Preset & Profit", findings: ["No follow-up", "No chat", "Reviews only on homepage"] });
+ok(ps.html.includes("https://calendly.com/justin/15min"), "summary email CTA is the booking link");
+ok(ps.html.includes("4,250") && ps.html.includes("Summit Air HVAC"), "summary email personalized");
+ok(!/undefined|\[object Object\]/.test(ps.html), "summary email no render defects");
+
 const m = activationMetrics([
   { crm: { activation: { enabled: true, sent: { 0: "x", 1: "x" }, opened: { 0: "x" }, clicked: {}, booked: false } } },
   { crm: { activation: { enabled: true, sent: { 0: "x", 1: "x", 2: "x" }, opened: { 0: "x", 1: "x" }, clicked: { 1: "x" }, booked: true } } },

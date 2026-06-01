@@ -1,0 +1,68 @@
+<!-- SAMPLE REPORT — content only. Print button uses native window.print(). -->
+<div class="doc">
+  <div class="sample-banner">Sample report · Illustrative example business · Your numbers will reflect your business</div>
+  <div style="display:flex;gap:.6rem;justify-content:flex-end;margin-bottom:1rem">
+    <button class="btn btn-ghost" style="padding:.6rem 1.2rem" onclick="window.print()">Save as PDF</button>
+    <a class="btn btn-primary" style="padding:.6rem 1.2rem" href="/audit">Run My Audit</a>
+  </div>
+  <div class="sheet reveal">
+    <div class="sheet-section doc-head">
+      <div>
+        <span class="lbl">Business Intelligence Audit</span>
+        <div class="doc-title">Northwind Cabinetry &amp; Millwork</div>
+        <div class="doc-sub">northwindcabinetry.example · Regional custom cabinetry · 14 employees</div>
+      </div>
+      <div class="meta">Report ID&nbsp; <b>PP-2026-0418</b><br>Prepared&nbsp; <b>Sample</b><br>Tier&nbsp; <b>Professional Audit</b><br>Scope&nbsp; <b>Web · Offer · Conversion · Ops</b></div>
+    </div>
+
+    <div class="sheet-section">
+      <span class="lbl">Core Scores</span>
+      <div class="scores">
+        <div class="score"><div class="gauge lg" style="--v:72;--c:var(--red)"><b>72</b></div><div class="nm">Risk</div><div class="in">High — manual dependencies</div></div>
+        <div class="score"><div class="gauge lg" style="--v:64;--c:var(--amber)"><b>64</b></div><div class="nm">Revenue Leak</div><div class="in">Elevated — pre-purchase loss</div></div>
+        <div class="score"><div class="gauge lg" style="--v:38;--c:var(--blue)"><b>38</b></div><div class="nm">Automation</div><div class="in">Low — mostly manual follow-up</div></div>
+        <div class="score"><div class="gauge lg" style="--v:54;--c:var(--gold)"><b>54</b></div><div class="nm">Conversion</div><div class="in">Mixed — clear gaps to close</div></div>
+      </div>
+      <p style="font-size:11.5px;color:var(--mute);margin-top:1rem;line-height:1.6">Risk and Revenue Leak are problem indicators — higher means more to address. Automation and Conversion are strength scores — higher is better. See <a class="link" href="/methodology" style="color:var(--cream)">methodology</a>.</p>
+    </div>
+
+    <div class="sheet-section summary">
+      <span class="lbl">Executive Summary</span>
+      <p>Northwind has strong demand and a quality offer, but loses most of its interested traffic before a conversation ever starts. The homepage leads with the company's history rather than what it sells and for whom, so first-time visitors spend their attention orienting instead of acting. The primary call-to-action asks for effort without reducing risk, and there is no fast, automated response when someone does reach out — quotes are handled manually and often take more than a day, by which point high-intent buyers have moved on.</p>
+      <p>Three issues account for the majority of estimated lost pipeline: an unclear above-the-fold offer, the absence of same-hour lead follow-up, and a quote-request flow with avoidable friction. None require a rebuild. Addressing the top two is estimated, conservatively, to recover a meaningful share of currently-lost inquiries within one quarter.</p>
+    </div>
+
+    <div class="sheet-section">
+      <span class="lbl">Key Findings</span>
+      <div class="finding"><div class="top"><span class="tag hi">High impact</span><span class="tag cat">Offer &amp; Positioning</span><span class="tag conf">High confidence</span></div><h4>The homepage doesn't say what you sell, for whom, in the first screen</h4><p>Above the fold leads with "Family-owned since 1998" and a building photo. A first-time visitor cannot quickly tell that you build custom kitchen and built-in cabinetry for residential remodels in the region. Orientation cost this high, on the most-visited page, suppresses every downstream action.</p><p class="impact">Estimated impact: high — affects the majority of new visitors.</p></div>
+      <div class="finding"><div class="top"><span class="tag hi">High impact</span><span class="tag cat">Automation &amp; Ops</span><span class="tag conf">High confidence</span></div><h4>No automated response in the first hour after an inquiry</h4><p>Quote requests are checked and answered manually, frequently with a delay of a day or more. For considered-purchase buyers comparing two or three providers, speed of first response is a primary differentiator.</p><p class="impact">Estimated impact: high — direct effect on close rate of existing inquiries.</p></div>
+      <div class="finding"><div class="top"><span class="tag md">Medium impact</span><span class="tag cat">Conversion</span><span class="tag conf">Medium confidence</span></div><h4>The quote-request form asks for too much, too early</h4><p>The form requests project details, budget, address, and timeline before any trust has been established. Shortening the first step typically reduces abandonment on requests like these.</p><p class="impact">Estimated impact: medium — recovers a portion of abandoned requests.</p></div>
+      <div class="finding"><div class="top"><span class="tag md">Medium impact</span><span class="tag cat">Website &amp; Funnel</span><span class="tag conf">Medium confidence</span></div><h4>Slow mobile load on the gallery page</h4><p>The portfolio gallery — a key trust-builder — ships full-resolution images and loads slowly on mobile, where a large share of traffic arrives.</p><p class="impact">Estimated impact: medium — affects evaluation and bounce on a high-intent page.</p></div>
+      <div class="finding"><div class="top"><span class="tag lo">Low impact</span><span class="tag cat">Customer Journey</span><span class="tag conf">Medium confidence</span></div><h4>No structured post-project follow-up</h4><p>After a job completes there is no consistent request for a review or referral. A smaller near-term number, but a compounding source of reputation and repeat revenue.</p><p class="impact">Estimated impact: low near-term, compounding over time.</p></div>
+    </div>
+
+    <div class="sheet-section">
+      <span class="lbl">Revenue Opportunity — Conservative Range</span>
+      <div class="opp">
+        <div class="box"><div class="r">$3,800 – $7,100<span style="font-size:.8rem;color:var(--chrome)"> /mo</span></div><div class="c">Estimated recoverable pipeline from fixing the top two findings (offer clarity + same-hour follow-up).</div></div>
+        <div class="box"><div class="r">~1 quarter</div><div class="c">Estimated time to realize most of the above, assuming the priority fixes are implemented.</div></div>
+      </div>
+      <p style="font-size:11.5px;color:var(--mute);margin-top:1rem;line-height:1.7">Range derived from estimated affected inquiry volume × an evidence-based recovery rate × stated average project value. Inputs are conservative; assumptions are listed in the full report appendix. A directional planning figure, not a financial projection.</p>
+    </div>
+
+    <div class="sheet-section">
+      <span class="lbl">Strategic Roadmap</span>
+      <div class="road"><div class="ph">Week 1</div><div class="body"><h4>Rewrite the above-the-fold offer</h4><p>State what you build, for whom, and where, in one headline and one line. Lowest effort, highest return — do this first.</p></div></div>
+      <div class="road"><div class="ph">Weeks 1–2</div><div class="body"><h4>Add same-hour automated lead response</h4><p>An immediate acknowledgement on every inquiry with next steps and a booking link, so no high-intent buyer waits a day.</p></div></div>
+      <div class="road"><div class="ph">Weeks 2–3</div><div class="body"><h4>Shorten the quote-request first step</h4><p>Reduce the initial form to the essentials; collect detail in a follow-up. Measure abandonment before and after.</p></div></div>
+      <div class="road"><div class="ph">Week 4</div><div class="body"><h4>Optimize the gallery for mobile</h4><p>Compress and lazy-load portfolio images. Re-check mobile load on the key evaluation page.</p></div></div>
+      <div class="road"><div class="ph">Ongoing</div><div class="body"><h4>Add post-project review &amp; referral follow-up</h4><p>A simple sequence after job completion to capture reviews and surface repeat/referral work.</p></div></div>
+    </div>
+
+    <div class="sheet-section" style="border-bottom:none;text-align:center">
+      <p style="font-size:12px;color:var(--chrome);line-height:1.8">This is an illustrative sample for demonstration. "Northwind Cabinetry" is fictional and any resemblance to a real business is coincidental.<br>Prepared with the Preset &amp; Profit methodology.</p>
+      <a href="/audit" class="btn btn-primary" style="margin-top:1.4rem">Run my own audit
+        <svg width="15" height="10" viewBox="0 0 15 10" fill="none"><path d="M0 5h13M9 1l4 4-4 4" stroke="currentColor" stroke-width="1"/></svg></a>
+    </div>
+  </div>
+</div>

@@ -179,6 +179,28 @@ function reengagement(d = {}) {
   };
 }
 
+// Operator follow-up reminder (Growth OS CRM). Goes to the DEAL OWNER — never
+// the prospect — so the shared sending domain's reputation is never exposed to
+// cold outreach. It nudges the operator to work a due deal.
+function followupReminder(d = {}) {
+  const biz = d.businessName ? esc(d.businessName) : "a deal";
+  const contact = d.contactName ? esc(d.contactName) : null;
+  return {
+    subject: `⏰ Follow-up due: ${d.businessName || "a deal"}`,
+    html: layout({
+      preheader: `A deal in your pipeline is due for follow-up.`,
+      body:
+        h("A deal is due for follow-up") +
+        hi(d.name) +
+        p(`Your follow-up for <strong>${biz}</strong>${contact ? ` (${contact})` : ""} is due${d.when ? ` — scheduled for ${esc(d.when)}` : ""}.`) +
+        (d.note ? p(`<span style="color:${COLOR.muted}">Last note:</span> ${esc(d.note)}`) : "") +
+        (d.contactEmail ? p(`<span style="color:${COLOR.muted}">Reach them at:</span> <a href="mailto:${esc(d.contactEmail)}" style="color:${COLOR.accent}">${esc(d.contactEmail)}</a>`) : "") +
+        `<div style="margin:8px 0 22px">${button(`${APP_URL}/?view=leads`, "Open the deal")}</div>` +
+        p(`<span style="color:${COLOR.muted}">Outreach copy and the proposal are ready on the deal — open it and send the next touch.</span>`),
+    }),
+  };
+}
+
 // Registry. Keys must match email_log.template and the dedupe_key prefixes.
 export const TEMPLATES = {
   audit_complete:        (d) => auditComplete(d),
@@ -189,6 +211,7 @@ export const TEMPLATES = {
   payment_failed:        (d) => paymentFailed(d),
   subscription_cancelled:(d) => subscriptionCancelled(d),
   reengagement:          (d) => reengagement(d),
+  followup_reminder:     (d) => followupReminder(d),
 };
 
 // Render a template by key. Throws on unknown key so a typo fails loudly in dev.

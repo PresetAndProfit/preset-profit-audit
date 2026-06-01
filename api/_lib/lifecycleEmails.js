@@ -196,13 +196,58 @@ async function trialEndingBatch(template, fromMs, toMs) {
   return sent;
 }
 
+// ── CRM follow-up sweep ──────────────────────────────────────────────────────
+// Growth OS: remind the OPERATOR (deal owner) about deals whose next_action_at is
+// due. Deliberately operator-only — we never cold-email prospects from the shared
+// domain. Deduped per scheduled date so a given follow-up reminds exactly once.
+async function followupBatch() {
+  const nowIso = new Date().toISOString();
+  const { data: due } = await supabaseAdmin
+    .from("audits")
+    .select("id, user_id, business_name, contact_email, contact_name, next_action_at, crm")
+    .not("next_action_at", "is", null)
+    .lte("next_action_at", nowIso)
+    .not("stage", "in", "(closed_won,closed_lost)")
+    .order("next_action_at", { ascending: true })
+    .limit(200);
+  const rows = due || [];
+  if (!rows.length) return 0;
+  const profiles = await emailsForUserIds([...new Set(rows.map((r) => r.user_id))]);
+  let sent = 0;
+  for (const r of rows) {
+    const prof = profiles[r.user_id];
+    if (!prof?.email) continue;
+    const dayTag = String(r.next_action_at).slice(0, 10); // dedupe per scheduled day
+    const notes = Array.isArray(r.crm?.notes) ? r.crm.notes : [];
+    const res = await sendLifecycleEmail({
+      to: prof.email,
+      template: "followup_reminder",
+      userId: r.user_id,
+      dedupeKey: `followup:${r.id}:${dayTag}`,
+      data: {
+        name: firstName(prof.full_name),
+        businessName: r.business_name,
+        contactName: r.contact_name,
+        contactEmail: r.contact_email,
+        when: formatDate(r.next_action_at),
+        note: notes.length ? notes[notes.length - 1].text : null,
+      },
+    });
+    if (res.ok && !res.skipped) sent++;
+  }
+  return sent;
+}
+
 export async function runDailySweep() {
-  const counts = { trial_ending_3d: 0, trial_ending_1d: 0, reengagement: 0 };
+  const counts = { trial_ending_3d: 0, trial_ending_1d: 0, reengagement: 0, followup_reminder: 0 };
   const now = Date.now();
 
   // Trial ending in ~3 days (48–72h out) and ~1 day (0–24h out).
   try { counts.trial_ending_3d = await trialEndingBatch("trial_ending_3d", now + 48 * HOUR, now + 72 * HOUR); } catch { /* ignore */ }
   try { counts.trial_ending_1d = await trialEndingBatch("trial_ending_1d", now, now + 24 * HOUR); } catch { /* ignore */ }
+
+  // CRM: operator follow-up reminders for due deals.
+  try { counts.followup_reminder = await followupBatch(); } catch { /* ignore */ }
 
   // Re-engagement: free-plan users who joined >30d ago and have no audit in the
   // last 30 days. Reuses the admin_usage_overview view (plan + last_audit_at).

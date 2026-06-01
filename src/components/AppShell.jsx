@@ -12,12 +12,14 @@ import LeadsView from "./LeadsView.jsx";
 import IntelligencePanel from "./IntelligencePanel.jsx";
 import AccountView from "./AccountView.jsx";
 import AdminView from "./AdminView.jsx";
-import { Btn, Tag } from "./ui/index.jsx";
+import UpgradeButton from "./UpgradeButton.jsx";
+import { Tag } from "./ui/index.jsx";
 import { useAudits } from "../lib/storage.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { computeUsage } from "../lib/usage.js";
 import { authedJson } from "../lib/api.js";
 import { stampStage } from "../lib/pipeline.js";
+import { conversionState } from "../lib/conversion.js";
 
 const NAV = [
   { id: "dashboard",     label: "Dashboard",    icon: "◈" },
@@ -30,18 +32,22 @@ const NAV = [
 ];
 
 // Shown in place of the scanner when the user has hit their plan's audit limit.
-function UpgradePanel({ plan, onAccount }) {
+// Value-anchored: leads with the pipeline the user has already built, then offers
+// a one-click upgrade straight to Stripe (no detour through the plans page).
+function UpgradePanel({ plan, audits = [], usage, onAccount }) {
+  const conv = conversionState(audits, plan, usage || { atLimit: true });
+  const offer = conv.upgrade || { headline: `You've used your ${plan.name} audit.`, sub: "Upgrade for unlimited audits and the full pipeline.", planId: "professional" };
   return (
     <div className="page-pad" style={{ maxWidth: 560, margin: "0 auto", animation: "fadeUp .4s ease" }}>
       <div style={{ background: "var(--panel)", border: "1px solid var(--amber)", borderRadius: 10, padding: 32, textAlign: "center" }}>
-        <div style={{ fontSize: 28, marginBottom: 12 }}>🔒</div>
-        <h1 style={{ fontFamily: "Syne", fontSize: 22, fontWeight: 800, marginBottom: 8 }}>You've used your {plan.name} audits</h1>
-        <p style={{ color: "var(--muted)", fontSize: 13, marginBottom: 20, lineHeight: 1.6 }}>
-          The {plan.name} plan includes {plan.auditLimit} audit{plan.auditLimit !== 1 ? "s" : ""}
-          {plan.period === "month" ? " per month" : ""}. Upgrade to run more and unlock un-watermarked
-          reports and score tracking.
-        </p>
-        <Btn onClick={onAccount}>View plans →</Btn>
+        <div style={{ fontSize: 28, marginBottom: 12 }}>🚀</div>
+        <h1 style={{ fontFamily: "Syne", fontSize: 21, fontWeight: 800, marginBottom: 10, lineHeight: 1.3 }}>{offer.headline}</h1>
+        <p style={{ color: "var(--muted)", fontSize: 13, marginBottom: 22, lineHeight: 1.7 }}>{offer.sub}</p>
+        <UpgradeButton planId={offer.planId}>Go Unlimited — $49/mo →</UpgradeButton>
+        <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 10 }}>14-day free trial · cancel anytime</div>
+        <div style={{ marginTop: 16 }}>
+          <button onClick={onAccount} style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 12, textDecoration: "underline", fontFamily: "IBM Plex Mono" }}>Compare all plans →</button>
+        </div>
       </div>
     </div>
   );
@@ -242,12 +248,16 @@ export default function AppShell() {
             onScan={() => go("scan")}
             onViewReport={openReport}
             onDeleteAudit={handleDeleteAudit}
+            plan={plan}
+            usage={usage}
+            onAccount={() => go("account")}
+            onPipeline={() => go("leads")}
           />
         )}
 
         {view === "scan" && (
           usage.atLimit
-            ? <UpgradePanel plan={plan} onAccount={() => go("account")} />
+            ? <UpgradePanel plan={plan} audits={audits} usage={usage} onAccount={() => go("account")} />
             : <AuditScanner
                 onComplete={handleScanComplete}
                 onScanStart={() => setScanning(true)}

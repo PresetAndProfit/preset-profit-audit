@@ -1,19 +1,30 @@
 import { ScoreRing, Tag, StatCard, Btn } from "./ui/index.jsx";
 import { STATUS_COLORS } from "../lib/constants.js";
 import { timeAgo } from "../lib/helpers.js";
+import { conversionState, usd } from "../lib/conversion.js";
+import UpgradeButton from "./UpgradeButton.jsx";
 
-export default function Dashboard({ audits, onScan, onViewReport, onDeleteAudit }) {
+export default function Dashboard({ audits, onScan, onViewReport, onDeleteAudit, plan, usage, onAccount, onPipeline }) {
   const hot    = audits.filter(a => a.status === "hot").length;
-  const avgRev = audits.length
-    ? Math.round(audits.reduce((s, a) => s + (a.revenueAmount || 0), 0) / audits.length)
-    : 0;
+  const conv   = conversionState(audits, plan || { id: "free" }, usage || { atLimit: false });
+  const pipelineValue = conv.pipelineValueCents / 100;
 
   const stats = [
-    { label: "Reports Run",       value: audits.length, delta: audits.length ? `${audits.length} business${audits.length !== 1 ? "es" : ""} analysed` : null, accent: "#f5a623" },
-    { label: "Priority Follow-ups", value: hot, delta: hot ? `${hot} high-opportunity business${hot !== 1 ? "es" : ""}` : null, accent: "#ff4757" },
-    { label: "Avg Extra Rev/Mo",  value: avgRev ? `$${avgRev.toLocaleString()}` : "—", delta: avgRev ? "average across all reports" : null, accent: "#00d68f" },
-    { label: "Reports Saved",     value: audits.length, delta: null, accent: "#4a9eff" },
+    { label: "Pipeline Value",    value: pipelineValue ? usd(pipelineValue) : "—", delta: pipelineValue ? "first-year revenue across deals" : "build a proposal to set value", accent: "#f5a623" },
+    { label: "Open Deals",        value: audits.length - conv.agg.byStage.closed_won - conv.agg.byStage.closed_lost, delta: `${audits.length} total`, accent: "#4a9eff" },
+    { label: "Won",               value: usd(conv.agg.wonValueCents / 100), delta: `${conv.agg.winRate}% win rate`, accent: "#00d68f" },
+    { label: "Priority Follow-ups", value: (conv.agg.dueFollowups || hot), delta: conv.agg.dueFollowups ? "due now" : hot ? `${hot} hot lead${hot !== 1 ? "s" : ""}` : null, accent: "#ff4757" },
   ];
+
+  // Deep-link the activation next-step to the right surface.
+  const runNext = () => {
+    const n = conv.next;
+    if (n.key === "scan") return onScan();
+    if (n.key === "upgrade") return onAccount?.();
+    if (n.key === "pipeline") return onPipeline?.();
+    if (n.deal) return onViewReport(n.deal);
+    return onScan();
+  };
 
   // ── First-time landing page ─────────────────────────────────────────────────
   if (audits.length === 0) {
@@ -101,6 +112,36 @@ export default function Dashboard({ audits, onScan, onViewReport, onDeleteAudit 
         </div>
         <Btn onClick={onScan}>+ New Report</Btn>
       </div>
+
+      {/* Activation next-step — drives the user to the next value moment */}
+      {conv.next && conv.next.key !== "pipeline" && (
+        <div style={{ background: "var(--panel)", border: "1px solid var(--amber)", borderRadius: 10, padding: "16px 20px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+            <div style={{ fontSize: 22, flexShrink: 0 }}>{conv.next.key === "upgrade" ? "🚀" : "→"}</div>
+            <div>
+              <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 15 }}>{conv.next.label}</div>
+              <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2, lineHeight: 1.5 }}>{conv.next.why}</div>
+            </div>
+          </div>
+          {conv.next.key === "upgrade"
+            ? <UpgradeButton planId={conv.upgrade?.planId || "professional"}>{conv.next.cta}</UpgradeButton>
+            : <Btn onClick={runNext} variant="primary">{conv.next.cta}</Btn>}
+        </div>
+      )}
+
+      {/* Value-anchored upgrade banner — sells on the dollars they've built */}
+      {conv.showUpgrade && conv.upgrade && (
+        <div style={{ background: "linear-gradient(90deg, rgba(245,166,35,0.12), rgba(245,166,35,0.03))", border: "1px solid var(--amber)", borderRadius: 10, padding: "18px 22px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 16, marginBottom: 4 }}>{conv.upgrade.headline}</div>
+            <div style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.6 }}>{conv.upgrade.sub}</div>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <UpgradeButton planId={conv.upgrade.planId}>Go Unlimited — {plan?.id === "free" ? "$49/mo" : "Upgrade"} →</UpgradeButton>
+            <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 6 }}>14-day free trial · cancel anytime</div>
+          </div>
+        </div>
+      )}
 
       <div className="stats-grid">
         {stats.map(s => <StatCard key={s.label} {...s} />)}

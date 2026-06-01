@@ -5,6 +5,7 @@ import { computeUsage } from "../lib/usage.js";
 import { startCheckout, openBillingPortal, syncSubscription } from "../lib/billing.js";
 import { Btn, Tag } from "./ui/index.jsx";
 import BrandingPanel from "./BrandingPanel.jsx";
+import BookingPanel from "./BookingPanel.jsx";
 
 export default function AccountView({ audits }) {
   const { user, profile, subscription, plan, signOut, refreshAccount } = useAuth();
@@ -143,6 +144,9 @@ export default function AccountView({ audits }) {
           )}
         </div>
       </div>
+
+      {/* Booking & outreach identity — every plan; powers the proposal/outreach CTA */}
+      <BookingPanel />
 
       {/* White-label branding (Agency) */}
       {plan.whiteLabel && <BrandingPanel />}

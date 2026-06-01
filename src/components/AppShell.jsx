@@ -3,39 +3,51 @@ import GlobalStyles from "./GlobalStyles.jsx";
 import Dashboard from "./Dashboard.jsx";
 import AuditScanner from "./AuditScanner.jsx";
 import ReportView from "./ReportView.jsx";
+import RoadmapView from "./RoadmapView.jsx";
+import OutreachView from "./OutreachView.jsx";
+import MarketplaceView from "./MarketplaceView.jsx";
+import AgencyConsole from "./AgencyConsole.jsx";
 import ServicesView from "./ServicesView.jsx";
 import LeadsView from "./LeadsView.jsx";
 import IntelligencePanel from "./IntelligencePanel.jsx";
 import AccountView from "./AccountView.jsx";
 import AdminView from "./AdminView.jsx";
-import { Btn, Tag } from "./ui/index.jsx";
+import UpgradeButton from "./UpgradeButton.jsx";
+import { Tag } from "./ui/index.jsx";
 import { useAudits } from "../lib/storage.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { computeUsage } from "../lib/usage.js";
 import { authedJson } from "../lib/api.js";
+import { stampStage } from "../lib/pipeline.js";
+import { conversionState } from "../lib/conversion.js";
 
 const NAV = [
   { id: "dashboard",     label: "Dashboard",    icon: "◈" },
   { id: "scan",          label: "New Audit",    icon: "⊕" },
-  { id: "leads",         label: "Lead Pipeline",icon: "◎" },
+  { id: "leads",         label: "Sales Pipeline",icon: "◎" },
+  { id: "marketplace",   label: "Marketplace",  icon: "▣" },
   { id: "intelligence",  label: "Intelligence", icon: "◆" },
   { id: "services",      label: "Services",     icon: "◇" },
   { id: "account",       label: "Account",      icon: "⊚" },
 ];
 
 // Shown in place of the scanner when the user has hit their plan's audit limit.
-function UpgradePanel({ plan, onAccount }) {
+// Value-anchored: leads with the pipeline the user has already built, then offers
+// a one-click upgrade straight to Stripe (no detour through the plans page).
+function UpgradePanel({ plan, audits = [], usage, onAccount }) {
+  const conv = conversionState(audits, plan, usage || { atLimit: true });
+  const offer = conv.upgrade || { headline: `You've used your ${plan.name} audit.`, sub: "Upgrade for unlimited audits and the full pipeline.", planId: "professional" };
   return (
     <div className="page-pad" style={{ maxWidth: 560, margin: "0 auto", animation: "fadeUp .4s ease" }}>
       <div style={{ background: "var(--panel)", border: "1px solid var(--amber)", borderRadius: 10, padding: 32, textAlign: "center" }}>
-        <div style={{ fontSize: 28, marginBottom: 12 }}>🔒</div>
-        <h1 style={{ fontFamily: "Syne", fontSize: 22, fontWeight: 800, marginBottom: 8 }}>You've used your {plan.name} audits</h1>
-        <p style={{ color: "var(--muted)", fontSize: 13, marginBottom: 20, lineHeight: 1.6 }}>
-          The {plan.name} plan includes {plan.auditLimit} audit{plan.auditLimit !== 1 ? "s" : ""}
-          {plan.period === "month" ? " per month" : ""}. Upgrade to run more and unlock un-watermarked
-          reports and score tracking.
-        </p>
-        <Btn onClick={onAccount}>View plans →</Btn>
+        <div style={{ fontSize: 28, marginBottom: 12 }}>🚀</div>
+        <h1 style={{ fontFamily: "Syne", fontSize: 21, fontWeight: 800, marginBottom: 10, lineHeight: 1.3 }}>{offer.headline}</h1>
+        <p style={{ color: "var(--muted)", fontSize: 13, marginBottom: 22, lineHeight: 1.7 }}>{offer.sub}</p>
+        <UpgradeButton planId={offer.planId}>Go Unlimited — $49/mo →</UpgradeButton>
+        <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 10 }}>14-day free trial · cancel anytime</div>
+        <div style={{ marginTop: 16 }}>
+          <button onClick={onAccount} style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 12, textDecoration: "underline", fontFamily: "IBM Plex Mono" }}>Compare all plans →</button>
+        </div>
       </div>
     </div>
   );
@@ -62,7 +74,7 @@ function MaintenanceScreen({ onSignOut }) {
 
 export default function AppShell() {
   const { user, profile, plan, subscription, signOut } = useAuth();
-  const { audits, save, remove } = useAudits();
+  const { audits, save, remove, updateDeal, startActivation } = useAudits();
 
   // Admin = profile flag OR the owner email (mirrors the server allowlist).
   const isAdmin = !!profile?.is_admin || (user?.email || "").toLowerCase() === "justin@presetprofit.com";
@@ -90,9 +102,24 @@ export default function AppShell() {
 
   const go = v => { setView(v); setOpen(false); };
 
+  // Keep the active deal in sync with the audits list so stage stamps + CRM
+  // edits made anywhere reflect immediately in the report/roadmap/outreach views.
+  const liveReport = report ? audits.find(a => a.id === report.id) || report : null;
+
   const openReport = audit => {
     setReport(audit);
     setView("report");
+  };
+
+  // Pipeline transitions — each engine entry stamps the deal forward.
+  const openRoadmapFor = audit => {
+    setReport(audit);
+    setView("roadmap");
+    if (audit) stampStage(updateDeal, audit, "roadmap", { detail: "roadmap opened" });
+  };
+  const openOutreachFor = audit => {
+    setReport(audit);
+    setView("outreach");
   };
 
   const handleScanComplete = r => {
@@ -107,6 +134,16 @@ export default function AppShell() {
   const branding = plan.whiteLabel
     ? { name: profile?.company_name || null, logoUrl: profile?.brand_logo_url || null, color: profile?.brand_color || null }
     : null;
+
+  // Booking/CTA identity — every plan. Threads the operator's real booking link
+  // and contact into outreach copy and the proposal's "Book the call" button, so
+  // every artifact drives a trackable booked call (the funnel's money event).
+  const cta = {
+    calendarUrl: profile?.calendar_url || null,
+    contactEmail: user?.email || null,
+    senderName: profile?.full_name || null,
+    senderCompany: (branding && branding.name) || profile?.company_name || null,
+  };
 
   // Agency-only share-link generator passed into ReportView.
   const handleShare = async (audit) => {
@@ -153,9 +190,15 @@ export default function AppShell() {
         </div>
 
         <nav style={{ padding: "12px 10px", flex: 1 }}>
-          {(isAdmin ? [...NAV, { id: "admin", label: "Admin", icon: "⚙" }] : NAV).map(item => {
-            // When viewing a report, treat "dashboard" as the active parent
-            const isActive = view === item.id || (view === "report" && item.id === "dashboard");
+          {[
+            ...NAV,
+            ...(plan.whiteLabel ? [{ id: "agency", label: "Agency Console", icon: "❖" }] : []),
+            ...(isAdmin ? [{ id: "admin", label: "Admin", icon: "⚙" }] : []),
+          ].map(item => {
+            // A deal opened from the pipeline keeps "Sales Pipeline" active across
+            // its report/roadmap/outreach sub-views; a fresh scan stays under Dashboard.
+            const dealViews = view === "report" || view === "roadmap" || view === "outreach";
+            const isActive = view === item.id || (dealViews && item.id === "leads");
             return (
               <button
                 key={item.id}
@@ -215,12 +258,16 @@ export default function AppShell() {
             onScan={() => go("scan")}
             onViewReport={openReport}
             onDeleteAudit={handleDeleteAudit}
+            plan={plan}
+            usage={usage}
+            onAccount={() => go("account")}
+            onPipeline={() => go("leads")}
           />
         )}
 
         {view === "scan" && (
           usage.atLimit
-            ? <UpgradePanel plan={plan} onAccount={() => go("account")} />
+            ? <UpgradePanel plan={plan} audits={audits} usage={usage} onAccount={() => go("account")} />
             : <AuditScanner
                 onComplete={handleScanComplete}
                 onScanStart={() => setScanning(true)}
@@ -228,23 +275,66 @@ export default function AppShell() {
               />
         )}
 
-        {view === "report" && report && (
+        {view === "report" && liveReport && (
           <ReportView
-            report={report}
+            report={liveReport}
             onBack={() => go("dashboard")}
             onSave={handleSaveAudit}
-            isAlreadySaved={audits.some(a => a.id === report.id)}
+            isAlreadySaved={audits.some(a => a.id === liveReport.id)}
             branding={branding}
             watermark={plan.watermark}
             onShare={plan.shareLinks ? handleShare : null}
+            onGenerateRoadmap={openRoadmapFor}
+          />
+        )}
+
+        {view === "roadmap" && liveReport && (
+          <RoadmapView
+            report={liveReport}
+            onBack={() => setView("report")}
+            branding={branding}
+            watermark={plan.watermark}
+            updateDeal={updateDeal}
+            cta={cta}
+            onGenerateOutreach={() => openOutreachFor(liveReport)}
+          />
+        )}
+
+        {view === "outreach" && liveReport && (
+          <OutreachView
+            report={liveReport}
+            onBack={() => setView("roadmap")}
+            branding={branding}
+            updateDeal={updateDeal}
+            cta={cta}
+            onStartActivation={startActivation}
           />
         )}
 
         {view === "leads" && (
           <LeadsView
             audits={audits}
+            updateDeal={updateDeal}
             onViewReport={openReport}
+            onViewRoadmap={openRoadmapFor}
+            onViewOutreach={openOutreachFor}
             onDeleteAudit={handleDeleteAudit}
+            onStartActivation={startActivation}
+          />
+        )}
+
+        {view === "marketplace" && (
+          <MarketplaceView audits={audits} plan={plan} onPipeline={() => go("leads")} />
+        )}
+
+        {view === "agency" && plan.whiteLabel && (
+          <AgencyConsole
+            audits={audits}
+            updateDeal={updateDeal}
+            branding={branding}
+            onViewReport={openReport}
+            onViewRoadmap={openRoadmapFor}
+            onShare={handleShare}
           />
         )}
 
@@ -252,7 +342,7 @@ export default function AppShell() {
           <IntelligencePanel audits={audits} />
         )}
 
-        {view === "services" && <ServicesView />}
+        {view === "services" && <ServicesView onMarketplace={() => go("marketplace")} />}
 
         {view === "account" && <AccountView audits={audits} />}
 

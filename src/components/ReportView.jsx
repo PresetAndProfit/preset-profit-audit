@@ -27,7 +27,7 @@ const findingBorder = s => s === "good" ? "rgba(0,214,143,0.2)" : s === "warn" ?
 // shared:   true when rendered on a public /r/:token page (read-only, no agency CTAs)
 // watermark: true for the free tier (stamps the PDF + shows a banner)
 // onShare:  async () => url   (Agency share-link generator)
-export default function ReportView({ report: r, onBack, onSave, isAlreadySaved, branding = null, shared = false, watermark = false, onShare = null }) {
+export default function ReportView({ report: r, onBack, onSave, isAlreadySaved, branding = null, shared = false, watermark = false, onShare = null, onGenerateRoadmap = null }) {
   const [tab, setTab]     = useState("overview");
   const [saved, setSaved] = useState(!!isAlreadySaved);
   const [sent, setSent]   = useState(false);
@@ -143,7 +143,8 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved, 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Btn onClick={handleSave} variant={saved ? "success" : "ghost"}>{saved ? "✓ Saved" : "Save Report"}</Btn>
             {onShare && <Btn onClick={handleShare} variant="ghost" disabled={sharing}>{sharing ? "Creating…" : shareUrl ? "✓ Link copied" : "🔗 Share link"}</Btn>}
-            <Btn onClick={sendToClient} variant={sent ? "success" : "primary"}>{sent ? "✓ PDF Ready" : "↓ Download PDF Report"}</Btn>
+            <Btn onClick={sendToClient} variant="ghost">{sent ? "✓ PDF Ready" : "↓ Download Report"}</Btn>
+            {onGenerateRoadmap && <Btn onClick={() => onGenerateRoadmap(r)} variant="primary">⚡ Build Automation Roadmap →</Btn>}
           </div>
         )}
       </div>
@@ -183,6 +184,22 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved, 
           </button>
         </div>
       </div>
+
+      {/* ── Conversion bridge: turn this audit into a priced, sequenced proposal ── */}
+      {onGenerateRoadmap && (
+        <div onClick={() => onGenerateRoadmap(r)} style={{ cursor: "pointer", background: "linear-gradient(90deg, rgba(245,166,35,0.12), rgba(245,166,35,0.04))", border: "1px solid var(--amber)", borderRadius: 10, padding: "16px 20px", marginBottom: 14, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 26, flexShrink: 0 }}>⚡</div>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 16, marginBottom: 3 }}>
+              Turn this audit into a done-for-you Automation Roadmap
+            </div>
+            <div style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.6 }}>
+              Match every gap to a system that fixes it, with pricing, payback, and a sequenced rollout — recover {liveTotalMonthly} on autopilot.
+            </div>
+          </div>
+          <Btn onClick={() => onGenerateRoadmap(r)} variant="primary">Build the Roadmap →</Btn>
+        </div>
+      )}
 
       {/* ── Real-scan evidence banner — proof we actually read the live site ── */}
       {r.siteScanned && r.siteSignals && (

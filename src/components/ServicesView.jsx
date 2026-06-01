@@ -1,12 +1,14 @@
 import { SERVICE_PACKAGES } from "../lib/constants.js";
+import { Btn } from "./ui/index.jsx";
 
-export default function ServicesView() {
+export default function ServicesView({ onMarketplace }) {
   return (
     <div className="page-pad" style={{ animation: "fadeUp .4s ease" }}>
       <div style={{ textAlign: "center", marginBottom: 40 }}>
         <div style={{ fontSize: 11, color: "var(--amber)", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 8 }}>Preset &amp; Profit</div>
         <h1 style={{ fontFamily: "Syne", fontSize: 28, fontWeight: 800, letterSpacing: "-0.02em" }}>Automation Services &amp; Packages</h1>
         <p style={{ color: "var(--muted)", marginTop: 8, fontSize: 14, maxWidth: 500, margin: "8px auto 0" }}>Done-for-you business automation. We build the systems; you collect the revenue.</p>
+        {onMarketplace && <div style={{ marginTop: 16 }}><Btn onClick={onMarketplace} variant="primary">Open the Automation Marketplace →</Btn></div>}
       </div>
 
       <div className="pricing-grid">

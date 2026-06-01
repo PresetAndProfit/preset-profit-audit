@@ -10,6 +10,9 @@ const BRAND = "Preset & Profit";
 const COLOR = { bg: "#0f1115", card: "#161a22", text: "#e7e9ee", muted: "#9aa3b2", accent: "#5b8cff", border: "#262c38" };
 
 const APP_URL = process.env.APP_URL || "https://app.presetprofit.com";
+// CAN-SPAM requires a valid physical postal address in every commercial email.
+// Set BUSINESS_ADDRESS in the environment to your real mailing address.
+const BUSINESS_ADDRESS = process.env.BUSINESS_ADDRESS || "Preset & Profit";
 
 const esc = (s) =>
   String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -18,8 +21,19 @@ function button(href, label) {
   return `<a href="${esc(href)}" style="display:inline-block;background:${COLOR.accent};color:#fff;text-decoration:none;font-weight:600;font-size:15px;padding:13px 26px;border-radius:8px">${esc(label)}</a>`;
 }
 
+// Compliant footer. `account` = recipients with a P&P account (manage prefs in
+// app). `prospect` = cold recipients of the public audit / activation sequence —
+// they have NO account, so we give a reply-based opt-out instead of a dead link.
+// Both include the physical postal address (CAN-SPAM).
+function footerHtml(kind) {
+  const optOut = kind === "prospect"
+    ? `You received this because you requested a free audit. To stop these emails, reply with “unsubscribe”.`
+    : `You're receiving this because you have a ${BRAND} account.&nbsp;·&nbsp;<a href="${esc(APP_URL)}/?view=account" style="color:${COLOR.muted}">Manage email preferences</a>`;
+  return `${BRAND} · ${esc(BUSINESS_ADDRESS)}<br>${optOut}`;
+}
+
 // Shared shell. `body` is trusted HTML built by a template below.
-function layout({ preheader = "", body }) {
+function layout({ preheader = "", body, footerKind = "account" }) {
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:${COLOR.bg};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
 <span style="display:none;visibility:hidden;opacity:0;height:0;width:0;overflow:hidden">${esc(preheader)}</span>
@@ -35,8 +49,7 @@ function layout({ preheader = "", body }) {
     </table>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px">
       <tr><td style="padding:18px 32px;color:${COLOR.muted};font-size:12px;line-height:1.5;text-align:center">
-        ${BRAND} · You're receiving this because you have an account.<br>
-        <a href="${esc(APP_URL)}/?view=account" style="color:${COLOR.muted}">Manage email preferences</a>
+        ${footerHtml(footerKind)}
       </td></tr>
     </table>
   </td></tr>
@@ -219,6 +232,7 @@ function activationNudge(d = {}, step = 0) {
   return {
     subject: s.subject,
     html: layout({
+      footerKind: "prospect",
       preheader: s.preheader,
       body:
         h(s.heading) +
@@ -244,6 +258,7 @@ function publicAuditSummary(d = {}) {
   return {
     subject: rev ? `${d.businessName || "Your"} audit: ${d.revenueOpportunity} in monthly opportunity` : `Your free audit for ${d.businessName || "your business"}`,
     html: layout({
+      footerKind: "prospect",
       preheader: "Your audit results + the fastest fixes.",
       body:
         h(`Your audit for ${biz}`) +

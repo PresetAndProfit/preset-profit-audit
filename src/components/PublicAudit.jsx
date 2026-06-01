@@ -118,8 +118,23 @@ export default function PublicAudit() {
                 {phase === "scanning" ? "Scanning your site…" : "Get My Free Audit →"}
               </button>
               {error && <div style={{ fontSize: 13, color: "var(--red)" }}>{error}</div>}
-              <div style={{ fontSize: 12, color: "var(--muted)" }}>✓ Live scan · ✓ No credit card · ✓ Results in seconds</div>
+              <div style={{ fontSize: 12, color: "var(--muted)" }}>✓ Live scan of your real website · ✓ No credit card · ✓ Results in seconds</div>
             </form>
+
+            {/* How it works — credibility for a cold visitor */}
+            <div style={{ marginTop: 44, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 14 }}>
+              {[
+                ["1", "We scan your live site", "Not a checklist — we read your actual homepage for the gaps costing you customers."],
+                ["2", "See what it's costing you", "Your scores plus an estimate of the revenue slipping away every month."],
+                ["3", "Get your fix plan", "The specific systems to recover it — and a call to have it done for you."],
+              ].map(([n, h2, b]) => (
+                <div key={n} style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 10, padding: "18px 20px" }}>
+                  <div style={{ width: 26, height: 26, borderRadius: "50%", background: "var(--amber-glow)", border: "1px solid var(--amber)", color: "var(--amber)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, marginBottom: 10 }}>{n}</div>
+                  <div style={{ fontFamily: "Syne", fontWeight: 700, fontSize: 14, marginBottom: 5 }}>{h2}</div>
+                  <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6 }}>{b}</div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -209,6 +224,21 @@ export default function PublicAudit() {
             )}
           </div>
         )}
+
+        {/* Footer — trust + legal (required for a public commercial page) */}
+        <div style={{ marginTop: 56, paddingTop: 20, borderTop: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+          <div style={{ fontSize: 12, color: "var(--muted)" }}>
+            <span style={{ fontFamily: "Syne", fontWeight: 700, color: "var(--text)" }}>Preset &amp; Profit</span> · Live website audits for local businesses
+          </div>
+          <div style={{ display: "flex", gap: 16, fontSize: 12 }}>
+            <a href="/terms" style={{ color: "var(--muted)", textDecoration: "none" }}>Terms</a>
+            <a href="/privacy" style={{ color: "var(--muted)", textDecoration: "none" }}>Privacy</a>
+            <a href="/refund" style={{ color: "var(--muted)", textDecoration: "none" }}>Refunds</a>
+          </div>
+        </div>
+        <div style={{ fontSize: 11, color: "var(--dim)", marginTop: 10, lineHeight: 1.6 }}>
+          We only use your website to generate your audit and your email to send your results. We never sell your data. Estimates are based on industry benchmarks and your live site — actual results vary.
+        </div>
       </div>
     </div>
   );

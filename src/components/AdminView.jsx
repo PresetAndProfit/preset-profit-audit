@@ -16,7 +16,7 @@ const ago = (d) => {
   return `${Math.floor(s / 86400)}d ago`;
 };
 
-const TABS = ["Overview", "Activity", "Users", "Audits", "Revenue", "Controls"];
+const TABS = ["Overview", "Activity", "Users", "Audits", "Revenue", "Emails", "Controls"];
 
 const Panel = ({ children, style }) => (
   <div style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 10, padding: 20, ...style }}>{children}</div>
@@ -48,6 +48,7 @@ export default function AdminView() {
       {tab === "Users" && <Users />}
       {tab === "Audits" && <Audits />}
       {tab === "Revenue" && <Revenue />}
+      {tab === "Emails" && <Emails />}
       {tab === "Controls" && <Controls />}
     </div>
   );
@@ -318,6 +319,123 @@ function Revenue() {
           ))}
         </div>
       </Panel>
+    </div>
+  );
+}
+
+// ── EMAILS (lifecycle email tracking) ──────────────────────────────────────────
+const EMAIL_TEMPLATES = ["audit_complete", "trial_started", "trial_ending_3d", "trial_ending_1d", "payment_succeeded", "payment_failed", "subscription_cancelled", "reengagement"];
+const STATUS_COLOR = {
+  delivered: "var(--green)", opened: "var(--green)", clicked: "var(--green)",
+  sent: "var(--blue)", pending: "var(--muted)",
+  bounced: "var(--red)", complained: "var(--red)", failed: "var(--red)",
+};
+
+function Emails() {
+  const [q, setQ] = useState("");
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("all");
+  const [template, setTemplate] = useState("all");
+  const metrics = useFetch("email_metrics");
+  const list = useFetch("emails", { q: query, status: status === "all" ? "" : status, template: template === "all" ? "" : template, limit: 150 });
+  const [detail, setDetail] = useState(null);
+
+  const m = metrics.data?.metrics;
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      {metrics.loading ? <Loading /> : metrics.error ? <ErrorBox error={metrics.error} /> : m && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 14 }}>
+          <StatCard label="Sent (total)" value={m.total} accent="var(--blue)" />
+          <StatCard label="Delivered" value={`${m.rates.delivered}%`} accent="var(--green)" />
+          <StatCard label="Opened" value={`${m.rates.opened}%`} accent="var(--green)" />
+          <StatCard label="Clicked" value={`${m.rates.clicked}%`} accent="var(--green)" />
+          <StatCard label="Bounced" value={m.byStatus.bounced + m.byStatus.complained} accent="var(--red)" />
+          <StatCard label="Failed" value={m.byStatus.failed} accent="var(--red)" />
+          <StatCard label="Pending" value={m.byStatus.pending} accent="var(--muted)" />
+        </div>
+      )}
+
+      <form onSubmit={(e) => { e.preventDefault(); setQuery(q); }} style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 220, maxWidth: 320 }}><Field label="Search by recipient email" value={q} onChange={setQ} placeholder="name@example.com" /></div>
+        <div style={{ width: 150 }}><Select label="Status" value={status} onChange={setStatus} options={["all", "pending", "sent", "delivered", "opened", "clicked", "bounced", "complained", "failed"]} /></div>
+        <div style={{ width: 190 }}><Select label="Template" value={template} onChange={setTemplate} options={["all", ...EMAIL_TEMPLATES]} /></div>
+        <Btn small onClick={() => setQuery(q)}>Search</Btn>
+      </form>
+
+      {list.loading ? <Loading /> : list.error ? <ErrorBox error={list.error} /> : (
+        <Panel style={{ padding: 0, overflow: "hidden" }}>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead><tr>{["RECIPIENT", "TEMPLATE", "STATUS", "SENT", ""].map((h) => <Th key={h}>{h}</Th>)}</tr></thead>
+              <tbody>
+                {(list.data.emails || []).map((e) => (
+                  <tr key={e.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                    <Td>{e.to_email}</Td>
+                    <Td><span style={{ color: "var(--muted)" }}>{e.template}</span></Td>
+                    <Td><Tag color={STATUS_COLOR[e.status] || "var(--muted)"}>{e.status}</Tag></Td>
+                    <Td><span style={{ color: "var(--muted)" }}>{ago(e.created_at)}</span></Td>
+                    <Td><Btn small variant="ghost" onClick={() => setDetail(e.id)}>View</Btn></Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {!(list.data.emails || []).length && <div style={{ padding: 16, color: "var(--muted)", fontSize: 12 }}>No emails found.</div>}
+        </Panel>
+      )}
+      {detail && <EmailDetail id={detail} onClose={() => setDetail(null)} onResent={() => { list.reload(); metrics.reload(); }} />}
+    </div>
+  );
+}
+
+const DetailRow = ({ label, value }) => value ? (
+  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 12, padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
+    <span style={{ color: "var(--muted)" }}>{label}</span><span style={{ textAlign: "right" }}>{value}</span>
+  </div>
+) : null;
+
+function EmailDetail({ id, onClose, onResent }) {
+  const { loading, error, data } = useFetch("email_detail", { id });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const e = data?.email;
+
+  const resend = async () => {
+    setBusy(true); setMsg("");
+    const { ok, json } = await call("email_resend", { id });
+    setBusy(false);
+    if (ok && json.ok) { setMsg("Resent ✓"); onResent?.(); }
+    else setMsg(json?.error || "resend-failed");
+  };
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 40, display: "flex", justifyContent: "flex-end" }}>
+      <div onClick={(ev) => ev.stopPropagation()} style={{ width: "min(480px, 94vw)", height: "100%", background: "var(--panel)", borderLeft: "1px solid var(--border)", padding: 24, overflowY: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <h2 style={{ fontFamily: "Syne", fontSize: 18, fontWeight: 800 }}>Email detail</h2>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 18 }}>✕</button>
+        </div>
+        {loading ? <Loading /> : error ? <ErrorBox error={error} /> : !e ? <div style={{ color: "var(--muted)", fontSize: 12 }}>Not found.</div> : (
+          <div style={{ display: "grid", gap: 12 }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <Tag color={STATUS_COLOR[e.status] || "var(--muted)"}>{e.status}</Tag>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>{e.template}</span>
+            </div>
+            <div style={{ fontSize: 13 }}>{e.subject}</div>
+            <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, padding: "4px 14px" }}>
+              <DetailRow label="To" value={e.to_email} />
+              <DetailRow label="Created" value={new Date(e.created_at).toLocaleString()} />
+              <DetailRow label="Delivered" value={e.delivered_at && new Date(e.delivered_at).toLocaleString()} />
+              <DetailRow label="Opened" value={e.opened_at && new Date(e.opened_at).toLocaleString()} />
+              <DetailRow label="Clicked" value={e.clicked_at && new Date(e.clicked_at).toLocaleString()} />
+              <DetailRow label="Message ID" value={e.provider_message_id} />
+            </div>
+            {e.error && <div style={{ background: "rgba(255,71,87,0.1)", border: "1px solid rgba(255,71,87,0.3)", borderRadius: 6, padding: "8px 10px", fontSize: 11, color: "#ff4757" }}>{e.error}</div>}
+            {msg && <div style={{ fontSize: 12, color: msg.includes("✓") ? "var(--green)" : "#ff4757" }}>{msg}</div>}
+            <Btn small variant="ghost" onClick={resend} disabled={busy}>{busy ? "Resending…" : "Resend email"}</Btn>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -8,6 +8,12 @@ import { stripe } from "../_lib/stripe.js";
 import { syncSubscriptionRecord } from "../_lib/syncSubscription.js";
 import { supabaseAdmin } from "../_lib/supabaseAdmin.js";
 import { logAdminEvent } from "../_lib/systemSettings.js";
+import {
+  onSubscriptionState,
+  onInvoicePaid,
+  onInvoiceFailed,
+  onSubscriptionCancelled,
+} from "../_lib/lifecycleEmails.js";
 
 // Resolve a denormalized email for the admin activity feed (best-effort).
 async function emailForUserId(uid) {
@@ -50,6 +56,8 @@ export default async function handler(req, res) {
       case "customer.subscription.created":
       case "customer.subscription.updated":
         result = await syncSubscriptionRecord(event.data.object);
+        // Lifecycle: Trial Started (fires once per subscription via dedupe key).
+        await onSubscriptionState(event.data.object);
         break;
 
       case "customer.subscription.deleted": {
@@ -60,6 +68,8 @@ export default async function handler(req, res) {
           email: await emailForUserId(sub.metadata?.supabase_user_id),
           detail: { message: "subscription canceled" },
         });
+        // Lifecycle: Cancellation + reactivation offer.
+        await onSubscriptionCancelled(sub);
         break;
       }
 
@@ -78,6 +88,11 @@ export default async function handler(req, res) {
             email: invoice.customer_email || null,
             detail: { message: "payment failed", amount: invoice.amount_due },
           });
+          // Lifecycle: Payment Failed + retry instructions.
+          await onInvoiceFailed(invoice);
+        } else {
+          // Lifecycle: Payment Succeeded receipt (skips $0 trial invoices, deduped per invoice).
+          await onInvoicePaid(invoice);
         }
         break;
       }
@@ -97,6 +112,9 @@ export default async function handler(req, res) {
             email: session.customer_details?.email || await emailForUserId(sub.metadata?.supabase_user_id),
             detail: { message: "subscription started" },
           });
+          // Lifecycle: Trial Started, sent promptly on checkout (deduped with the
+          // subscription.created event above so it never double-sends).
+          await onSubscriptionState(sub);
         }
         break;
       }

@@ -8,6 +8,8 @@ import { supabaseAdmin, getUserFromRequest } from "../_lib/supabaseAdmin.js";
 import { assertCanCreateAudit, enforceAuditLimitForClient, logUsageEvent } from "../_lib/usageServer.js";
 import { isDisabled } from "../_lib/systemSettings.js";
 import { isAdminEmail } from "../_lib/adminAuth.js";
+import { onAuditComplete } from "../_lib/lifecycleEmails.js";
+import { effectivePlan } from "../../src/lib/plans.js";
 
 function reportToRow(userId, audit) {
   return {
@@ -58,7 +60,7 @@ export default async function handler(req, res) {
     const { data, error } = await supabaseAdmin
       .from("audits")
       .upsert(row, { onConflict: "user_id,client_id" })
-      .select("data")
+      .select("id, data")
       .single();
 
     if (error) {
@@ -80,6 +82,22 @@ export default async function handler(req, res) {
       await logUsageEvent(user.id, "audit_created", {
         auditId: data?.id ?? null,
         metadata: { client_id: String(audit.id), business: audit.businessName ?? null },
+      });
+
+      // Lifecycle: Audit Complete email (only for brand-new audits, deduped by
+      // audit id). Best-effort — never fails the save. The upgrade CTA is shown
+      // only to users who aren't already on a paid plan.
+      const [{ data: profile }, { data: sub }] = await Promise.all([
+        supabaseAdmin.from("profiles").select("full_name").eq("id", user.id).maybeSingle(),
+        supabaseAdmin.from("subscriptions").select("plan, status").eq("user_id", user.id).maybeSingle(),
+      ]);
+      await onAuditComplete({
+        userId: user.id,
+        email: user.email,
+        fullName: profile?.full_name ?? null,
+        auditRowId: data?.id ?? null,
+        audit,
+        isPaid: effectivePlan(sub)?.id !== "free",
       });
     }
 

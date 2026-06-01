@@ -7,6 +7,7 @@
 import { supabaseAdmin } from "../_lib/supabaseAdmin.js";
 import { requireAdmin } from "../_lib/adminAuth.js";
 import { getSettings, setSettings, logAdminEvent } from "../_lib/systemSettings.js";
+import { sendLifecycleEmail } from "../_lib/email.js";
 import { PLANS } from "../../src/lib/plans.js";
 
 const PAID = ["professional", "agency"];
@@ -139,6 +140,68 @@ async function auditDetail({ auditId }) {
   return data || null;
 }
 
+// ── LIFECYCLE EMAILS (Phase 1) ───────────────────────────────────────────────
+const EMAIL_STATUSES = ["pending", "sent", "delivered", "opened", "clicked", "bounced", "complained", "failed"];
+
+async function emailMetrics() {
+  const entries = await Promise.all(
+    EMAIL_STATUSES.map(async (s) => [s, await count("email_log", (q) => q.eq("status", s))])
+  );
+  const byStatus = Object.fromEntries(entries);
+  const total = Object.values(byStatus).reduce((a, b) => a + b, 0);
+  // Delivery-funnel rates (guard divide-by-zero). Opened/clicked are subsets of delivered.
+  const delivered = byStatus.delivered + byStatus.opened + byStatus.clicked;
+  const opened = byStatus.opened + byStatus.clicked;
+  return {
+    total,
+    byStatus,
+    rates: {
+      delivered: total ? Math.round((delivered / total) * 1000) / 10 : 0,
+      opened: delivered ? Math.round((opened / delivered) * 1000) / 10 : 0,
+      clicked: delivered ? Math.round((byStatus.clicked / delivered) * 1000) / 10 : 0,
+      bounced: total ? Math.round((byStatus.bounced / total) * 1000) / 10 : 0,
+    },
+  };
+}
+
+async function emails({ q = "", status = "", template = "", limit = 100 } = {}) {
+  let query = supabaseAdmin
+    .from("email_log")
+    .select("id, to_email, template, subject, status, created_at, delivered_at, opened_at, clicked_at, error")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (status) query = query.eq("status", status);
+  if (template) query = query.eq("template", template);
+  const term = q.trim().replace(/[,()%*]/g, "");
+  if (term) query = query.ilike("to_email", `%${term}%`);
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
+}
+
+async function emailDetail({ id }) {
+  const { data } = await supabaseAdmin.from("email_log").select("*").eq("id", id).maybeSingle();
+  return data || null;
+}
+
+async function emailResend({ id }, admin) {
+  const { data: row } = await supabaseAdmin.from("email_log").select("*").eq("id", id).maybeSingle();
+  if (!row) return { ok: false, error: "not-found" };
+  // Force a fresh send (new log row, no dedupe) re-rendering from the stored data.
+  const r = await sendLifecycleEmail({
+    to: row.to_email,
+    template: row.template,
+    data: row.metadata || {},
+    userId: row.user_id,
+    force: true,
+  });
+  await logAdminEvent("email_resend", {
+    userId: row.user_id, email: row.to_email,
+    detail: { message: `admin resent ${row.template}`, by: admin.email, ok: r.ok, error: r.error || null },
+  });
+  return { ok: r.ok, error: r.error || null };
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "method-not-allowed" });
   const admin = await requireAdmin(req);
@@ -173,6 +236,10 @@ export default async function handler(req, res) {
           },
         });
       }
+      case "email_metrics": return res.status(200).json({ ok: true, metrics: await emailMetrics() });
+      case "emails":        return res.status(200).json({ ok: true, emails: await emails(body) });
+      case "email_detail":  return res.status(200).json({ ok: true, email: await emailDetail(body) });
+      case "email_resend":  return res.status(200).json(await emailResend(body, admin));
       case "settings_get":  return res.status(200).json({ ok: true, settings: await getSettings({ fresh: true }) });
       case "settings_set": {
         const r = await setSettings(body.settings || {}, admin.id);

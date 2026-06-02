@@ -1,18 +1,17 @@
 // src/lib/legalContent.js — legal page content.
 //
-// ⚠️ THESE ARE STARTER TEMPLATES, NOT LEGAL ADVICE. Before launch, fill every
-// {{PLACEHOLDER}} in COMPANY below and have the documents reviewed by a lawyer
-// in your jurisdiction. They cover the basics a SaaS taking subscriptions needs
-// (terms, privacy with sub-processors, refund/cancellation) but are not a
-// substitute for counsel.
+// Company details are set in COMPANY below. These cover the basics a SaaS
+// taking subscriptions needs (terms, privacy with sub-processors, refund/
+// cancellation); having them reviewed by counsel in your jurisdiction is still
+// recommended.
 
 export const COMPANY = {
   product: "Preset & Profit",
-  legalEntity: "{{LEGAL_ENTITY_NAME}}", // e.g. "Preset & Profit LLC"
-  email: "{{CONTACT_EMAIL}}",           // e.g. "support@presetandprofit.com"
-  site: "{{WEBSITE_URL}}",              // e.g. "https://presetandprofit.com"
-  governingLaw: "{{GOVERNING_LAW}}",    // e.g. "the State of Texas, USA"
-  effectiveDate: "{{EFFECTIVE_DATE}}",  // e.g. "June 1, 2026"
+  legalEntity: "Preset & Profit",
+  email: "hello@presetprofit.com",
+  site: "https://presetprofit.com",
+  governingLaw: "the Commonwealth of Virginia, United States",
+  effectiveDate: "June 1, 2026",
 };
 
 const c = COMPANY;

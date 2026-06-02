@@ -184,7 +184,7 @@ export default function AppShell() {
           <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontWeight: 500, fontSize: 23, letterSpacing: "0.3px", color: "var(--text)" }}>
             Preset <span style={{ color: "var(--gold)" }}>&amp;</span> Profit
           </div>
-          <div style={{ fontSize: 9, color: "var(--muted)", marginTop: 3, letterSpacing: "0.18em", textTransform: "uppercase" }}>Audit Intelligence Platform</div>
+          <div style={{ fontSize: 9, color: "var(--muted)", marginTop: 3, letterSpacing: "0.18em", textTransform: "uppercase" }}>Intelligence Platform</div>
         </div>
 
         <nav style={{ padding: "12px 10px", flex: 1 }}>

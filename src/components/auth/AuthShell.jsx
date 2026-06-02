@@ -14,7 +14,7 @@ export default function AuthShell({ title, subtitle, children, footer }) {
             Preset <span style={{ color: "var(--gold)" }}>&amp;</span> Profit
           </div>
           <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 4, letterSpacing: "0.18em", textTransform: "uppercase" }}>
-            Audit Intelligence Platform
+            Intelligence Platform
           </div>
         </div>
 

@@ -36,7 +36,7 @@ export default function Dashboard({ audits, onScan, onViewReport, onDeleteAudit,
           <div style={{ fontSize: 11, color: "var(--amber)", letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: 16, fontWeight: 600 }}>
             Preset &amp; Profit · Free Business Report
           </div>
-          <h1 style={{ fontFamily: "Syne", fontSize: 32, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.2, marginBottom: 16 }}>
+          <h1 style={{ fontFamily: "Sora", fontSize: 32, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.2, marginBottom: 16 }}>
             See exactly where your business<br />is losing customers right now
           </h1>
           <p style={{ color: "var(--muted)", fontSize: 15, lineHeight: 1.75, maxWidth: 480, margin: "0 auto 32px" }}>
@@ -75,7 +75,7 @@ export default function Dashboard({ audits, onScan, onViewReport, onDeleteAudit,
             }}>
               <span style={{ fontSize: 22, flexShrink: 0 }}>{item.icon}</span>
               <div>
-                <div style={{ fontFamily: "Syne", fontWeight: 700, fontSize: 13, marginBottom: 5 }}>{item.heading}</div>
+                <div style={{ fontFamily: "Sora", fontWeight: 700, fontSize: 13, marginBottom: 5 }}>{item.heading}</div>
                 <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6 }}>{item.body}</div>
               </div>
             </div>
@@ -105,7 +105,7 @@ export default function Dashboard({ audits, onScan, onViewReport, onDeleteAudit,
     <div className="page-pad" style={{ animation: "fadeUp .4s ease" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <h1 style={{ fontFamily: "Syne", fontSize: 26, fontWeight: 800, letterSpacing: "-0.02em" }}>Your Reports</h1>
+          <h1 style={{ fontFamily: "Sora", fontSize: 26, fontWeight: 800, letterSpacing: "-0.02em" }}>Your Reports</h1>
           <p style={{ color: "var(--muted)", fontSize: 13, marginTop: 4 }}>
             Preset &amp; Profit · {audits.length} business{audits.length !== 1 ? "es" : ""} analysed
           </p>
@@ -119,7 +119,7 @@ export default function Dashboard({ audits, onScan, onViewReport, onDeleteAudit,
           <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
             <div style={{ fontSize: 22, flexShrink: 0 }}>{conv.next.key === "upgrade" ? "🚀" : "→"}</div>
             <div>
-              <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 15 }}>{conv.next.label}</div>
+              <div style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 15 }}>{conv.next.label}</div>
               <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2, lineHeight: 1.5 }}>{conv.next.why}</div>
             </div>
           </div>
@@ -133,7 +133,7 @@ export default function Dashboard({ audits, onScan, onViewReport, onDeleteAudit,
       {conv.showUpgrade && conv.upgrade && (
         <div style={{ background: "linear-gradient(90deg, rgba(245,166,35,0.12), rgba(245,166,35,0.03))", border: "1px solid var(--amber)", borderRadius: 10, padding: "18px 22px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
           <div style={{ flex: 1, minWidth: 240 }}>
-            <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 16, marginBottom: 4 }}>{conv.upgrade.headline}</div>
+            <div style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 16, marginBottom: 4 }}>{conv.upgrade.headline}</div>
             <div style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.6 }}>{conv.upgrade.sub}</div>
           </div>
           <div style={{ textAlign: "right" }}>
@@ -149,7 +149,7 @@ export default function Dashboard({ audits, onScan, onViewReport, onDeleteAudit,
 
       <div style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 8, overflow: "hidden" }}>
         <div style={{ padding: "14px 24px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ fontFamily: "Syne", fontWeight: 700, fontSize: 14 }}>Recent Reports</span>
+          <span style={{ fontFamily: "Sora", fontWeight: 700, fontSize: 14 }}>Recent Reports</span>
           <span style={{ fontSize: 11, color: "var(--muted)" }}>{audits.length} saved</span>
         </div>
 

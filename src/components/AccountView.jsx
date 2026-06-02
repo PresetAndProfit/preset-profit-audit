@@ -92,7 +92,7 @@ export default function AccountView({ audits }) {
 
   return (
     <div className="page-pad" style={{ maxWidth: 860, margin: "0 auto", animation: "fadeUp .4s ease" }}>
-      <h1 style={{ fontFamily: "Syne", fontSize: 24, fontWeight: 800, marginBottom: 6 }}>Account & Plan</h1>
+      <h1 style={{ fontFamily: "Sora", fontSize: 24, fontWeight: 800, marginBottom: 6 }}>Account & Plan</h1>
       <p style={{ color: "var(--muted)", fontSize: 13, marginBottom: 24 }}>
         Manage your subscription and track your audit usage.
       </p>
@@ -135,7 +135,7 @@ export default function AccountView({ audits }) {
             </span>
           </div>
           <div style={{ height: 6, background: "var(--surface)", borderRadius: 3, overflow: "hidden" }}>
-            <div style={{ height: "100%", width: usage.unlimited ? "100%" : `${pct}%`, background: usage.unlimited ? "var(--green)" : usage.atLimit ? "var(--red)" : "var(--amber)", borderRadius: 3, transition: "width .5s ease" }} />
+            <div style={{ height: "100%", width: usage.unlimited ? "100%" : `${pct}%`, background: usage.unlimited ? "var(--green)" : usage.atLimit ? "var(--red)" : "var(--warn)", borderRadius: 3, transition: "width .5s ease" }} />
           </div>
           {usage.atLimit && (
             <div style={{ fontSize: 11, color: "var(--red)", marginTop: 8 }}>
@@ -164,9 +164,9 @@ export default function AccountView({ audits }) {
               position: "relative",
             }}>
               {current && <div style={{ position: "absolute", top: 14, right: 14 }}><Tag color="var(--green)">Current</Tag></div>}
-              <div style={{ fontFamily: "Syne", fontSize: 16, fontWeight: 800 }}>{p.name}</div>
+              <div style={{ fontFamily: "Sora", fontSize: 16, fontWeight: 800 }}>{p.name}</div>
               <div style={{ margin: "6px 0 12px" }}>
-                <span style={{ fontSize: 24, fontWeight: 700, fontFamily: "Syne" }}>{p.price}</span>
+                <span style={{ fontSize: 24, fontWeight: 700, fontFamily: "Sora" }}>{p.price}</span>
                 <span style={{ fontSize: 12, color: "var(--muted)" }}> {p.priceNote}</span>
               </div>
               <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12, minHeight: 32 }}>{p.blurb}</div>

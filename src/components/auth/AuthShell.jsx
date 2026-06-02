@@ -10,12 +10,11 @@ export default function AuthShell({ title, subtitle, children, footer }) {
       <GlobalStyles />
       <div style={{ width: "100%", maxWidth: 400, animation: "fadeUp .4s ease" }}>
         <div style={{ textAlign: "center", marginBottom: 24 }}>
-          <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 22, letterSpacing: "-0.02em" }}>
-            <span style={{ color: "var(--amber)" }}>PRESET</span>
-            <span style={{ color: "var(--text)" }}>&amp;PROFIT</span>
+          <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontWeight: 500, fontSize: 30, letterSpacing: "0.3px", color: "var(--text)" }}>
+            Preset <span style={{ color: "var(--gold)" }}>&amp;</span> Profit
           </div>
-          <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2, letterSpacing: "0.08em" }}>
-            BUSINESS AUDIT PLATFORM
+          <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 4, letterSpacing: "0.18em", textTransform: "uppercase" }}>
+            Audit Intelligence Platform
           </div>
         </div>
 
@@ -23,7 +22,7 @@ export default function AuthShell({ title, subtitle, children, footer }) {
           background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 10,
           padding: 28,
         }}>
-          <h1 style={{ fontFamily: "Syne", fontSize: 20, fontWeight: 800, marginBottom: 4 }}>{title}</h1>
+          <h1 style={{ fontFamily: "Sora", fontSize: 20, fontWeight: 800, marginBottom: 4 }}>{title}</h1>
           {subtitle && <p style={{ color: "var(--muted)", fontSize: 12, marginBottom: 20 }}>{subtitle}</p>}
           {children}
         </div>

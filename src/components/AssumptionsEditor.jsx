@@ -22,7 +22,7 @@ function Slider({ label, subLabel, value, min, max, step, format, onChange, benc
             }}>edited</span>
           )}
           <div style={{
-            fontFamily: "Syne", fontWeight: 800, fontSize: 20,
+            fontFamily: "Sora", fontWeight: 800, fontSize: 20,
             color: changed ? "var(--amber)" : "var(--text)",
             minWidth: 64, textAlign: "right",
             transition: "color .15s",
@@ -135,7 +135,7 @@ export default function AssumptionsEditor({ assumptions, benchmarks: benchmarksP
         }}
       >
         <div style={{ flex: 1 }}>
-          <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 15, color: "var(--text)", marginBottom: 2 }}>
+          <div style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 15, color: "var(--text)", marginBottom: 2 }}>
             Adjust to your actual numbers
           </div>
           <div style={{ fontSize: 11, color: "var(--muted)" }}>
@@ -146,7 +146,7 @@ export default function AssumptionsEditor({ assumptions, benchmarks: benchmarksP
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
           {/* Live total */}
           <div style={{ textAlign: "right" }}>
-            <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 22, color: "var(--green)", lineHeight: 1 }}>
+            <div style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 22, color: "var(--green)", lineHeight: 1 }}>
               ${liveTotal.toLocaleString()}<span style={{ fontSize: 12, fontWeight: 400, color: "var(--muted)" }}>/mo</span>
             </div>
             {diff !== 0 && (
@@ -198,7 +198,7 @@ export default function AssumptionsEditor({ assumptions, benchmarks: benchmarksP
           }}>
             <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, padding: "12px 16px" }}>
               <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 4 }}>Industry benchmark</div>
-              <div style={{ fontFamily: "Syne", fontWeight: 700, fontSize: 18, color: "var(--muted)" }}>
+              <div style={{ fontFamily: "Sora", fontWeight: 700, fontSize: 18, color: "var(--muted)" }}>
                 ${benchmarkTotal.toLocaleString()}<span style={{ fontSize: 11, fontWeight: 400 }}>/mo</span>
               </div>
             </div>
@@ -215,7 +215,7 @@ export default function AssumptionsEditor({ assumptions, benchmarks: benchmarksP
               <div style={{ fontSize: 10, color: diff !== 0 ? "var(--green)" : "var(--muted)", marginBottom: 4 }}>
                 {diff !== 0 ? `${bizName}'s numbers` : "Your numbers (same)"}
               </div>
-              <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 18, color: diff !== 0 ? "var(--green)" : "var(--muted)" }}>
+              <div style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 18, color: diff !== 0 ? "var(--green)" : "var(--muted)" }}>
                 ${liveTotal.toLocaleString()}<span style={{ fontSize: 11, fontWeight: 400 }}>/mo</span>
               </div>
             </div>

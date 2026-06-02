@@ -37,7 +37,7 @@ export default function BrandingPanel() {
   return (
     <div style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 10, padding: 24, marginBottom: 24 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-        <h2 style={{ fontFamily: "Syne", fontSize: 16, fontWeight: 800 }}>White-label branding</h2>
+        <h2 style={{ fontFamily: "Sora", fontSize: 16, fontWeight: 800 }}>White-label branding</h2>
         <span style={{ fontSize: 10, color: "var(--green)", letterSpacing: "0.08em" }}>AGENCY</span>
       </div>
       <p style={{ color: "var(--muted)", fontSize: 12, marginBottom: 18 }}>
@@ -67,7 +67,7 @@ export default function BrandingPanel() {
           ? <img src={form.brand_logo_url} alt="logo" style={{ height: 28, maxWidth: 120, objectFit: "contain" }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
           : <div style={{ width: 28, height: 28, borderRadius: 6, background: form.brand_color }} />}
         <div>
-          <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 14, color: "var(--text)" }}>{form.company_name || "Your Company"}</div>
+          <div style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 14, color: "var(--text)" }}>{form.company_name || "Your Company"}</div>
           <div style={{ fontSize: 10, color: "var(--muted)" }}>Report header preview</div>
         </div>
       </div>

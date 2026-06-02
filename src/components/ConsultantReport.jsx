@@ -16,7 +16,7 @@ const Eyebrow = ({ children }) => (
   <div style={{ fontSize: 10, color: "var(--amber)", letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: 6, fontWeight: 700 }}>{children}</div>
 );
 const SectionHead = ({ children }) => (
-  <h2 style={{ fontFamily: "Syne", fontSize: 19, fontWeight: 800, letterSpacing: "-0.01em", margin: "0 0 14px" }}>{children}</h2>
+  <h2 style={{ fontFamily: "Sora", fontSize: 19, fontWeight: 800, letterSpacing: "-0.01em", margin: "0 0 14px" }}>{children}</h2>
 );
 const Section = ({ children }) => (
   <section style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 12, padding: "22px 24px", marginBottom: 16 }}>{children}</section>
@@ -32,10 +32,10 @@ const GroundBadge = ({ grounded, title }) => (
   </span>
 );
 const ConfChip = ({ level }) => {
-  const c = level === "high" ? "var(--green)" : level === "medium" ? "var(--amber)" : "var(--muted)";
+  const c = level === "high" ? "var(--green)" : level === "medium" ? "var(--warn)" : "var(--muted)";
   return <span style={{ fontSize: 9, color: c, border: `1px solid ${c}`, borderRadius: 4, padding: "1px 6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>{level} confidence</span>;
 };
-const statusColor = (s) => (s === "good" ? "var(--green)" : s === "warn" ? "var(--amber)" : "var(--red)");
+const statusColor = (s) => (s === "good" ? "var(--green)" : s === "warn" ? "var(--warn)" : "var(--red)");
 
 export default function ConsultantReport({ r }) {
   if (!r?.aiGenerated) return null;
@@ -69,7 +69,7 @@ export default function ConsultantReport({ r }) {
         <Eyebrow>Executive Summary</Eyebrow>
         <SectionHead>What this means for {r.businessName}</SectionHead>
         {brief?.headline && (
-          <p style={{ fontFamily: "Syne", fontSize: 16, fontWeight: 700, lineHeight: 1.5, color: "var(--text)", borderLeft: "3px solid var(--amber)", paddingLeft: 14, margin: "0 0 14px" }}>{brief.headline}</p>
+          <p style={{ fontFamily: "Sora", fontSize: 16, fontWeight: 700, lineHeight: 1.5, color: "var(--text)", borderLeft: "3px solid var(--amber)", paddingLeft: 14, margin: "0 0 14px" }}>{brief.headline}</p>
         )}
         {String(r.executiveSummary || "").split(/\n\s*\n/).filter(Boolean).map((p, i) => (
           <p key={i} style={{ fontSize: 13.5, lineHeight: 1.75, marginBottom: 10, color: "var(--text)" }}>{p}</p>
@@ -304,7 +304,7 @@ export default function ConsultantReport({ r }) {
               const col = ["var(--green)", "var(--amber)", "var(--blue)"][idx];
               return (
                 <div key={idx} style={{ borderLeft: `3px solid ${col}`, background: "var(--surface)", borderRadius: 6, padding: "12px 16px" }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 700, color: col, fontFamily: "Syne", marginBottom: 8 }}>Phase {idx + 1}: {phase.title}</div>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: col, fontFamily: "Sora", marginBottom: 8 }}>Phase {idx + 1}: {phase.title}</div>
                   <ol style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 5 }}>
                     {(phase.actions || []).map((a, i) => <li key={i} style={{ fontSize: 12.5, lineHeight: 1.55 }}>{a}</li>)}
                   </ol>

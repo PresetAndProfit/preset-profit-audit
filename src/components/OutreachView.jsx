@@ -16,7 +16,7 @@ function Block({ title, meta, text, children }) {
     <div style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 8, overflow: "hidden" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: "1px solid var(--border)", flexWrap: "wrap", gap: 8 }}>
         <div>
-          <div style={{ fontFamily: "Syne", fontWeight: 700, fontSize: 14 }}>{title}</div>
+          <div style={{ fontFamily: "Sora", fontWeight: 700, fontSize: 14 }}>{title}</div>
           {meta && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{meta}</div>}
         </div>
         {text != null && <CopyBtn text={text} />}
@@ -69,7 +69,7 @@ export default function OutreachView({ report: deal, updateDeal, onBack, brandin
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12, marginBottom: 18 }}>
         <div>
           {onBack && <button onClick={onBack} style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 12, marginBottom: 8, fontFamily: "IBM Plex Mono" }}>← Back</button>}
-          <h1 style={{ fontFamily: "Syne", fontSize: 22, fontWeight: 800 }}>{deal.businessName} — Outreach</h1>
+          <h1 style={{ fontFamily: "Sora", fontSize: 22, fontWeight: 800 }}>{deal.businessName} — Outreach</h1>
           <div style={{ fontSize: 11, color: "var(--amber)", letterSpacing: "0.08em", textTransform: "uppercase", marginTop: 4 }}>
             Conversion copy · grounded in {h.monthly}/mo leak · {h.roi} ROI
           </div>

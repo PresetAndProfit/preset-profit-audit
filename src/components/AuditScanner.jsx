@@ -84,7 +84,7 @@ export default function AuditScanner({ onComplete, onScanStart, onScanEnd }) {
 
   return (
     <div className="page-pad" style={{ maxWidth: 760, margin: "0 auto", animation: "fadeUp .4s ease" }}>
-      <h1 style={{ fontFamily: "Syne", fontSize: 24, fontWeight: 800, marginBottom: 6 }}>Free Business Report</h1>
+      <h1 style={{ fontFamily: "Sora", fontSize: 24, fontWeight: 800, marginBottom: 6 }}>Free Business Report</h1>
       <p style={{ color: "var(--muted)", fontSize: 13, marginBottom: 20 }}>Tell us about the business and we'll show you exactly where customers are slipping through the cracks — and how much it's costing. Takes 30 seconds.</p>
 
       {/* What you'll receive */}
@@ -100,7 +100,7 @@ export default function AuditScanner({ onComplete, onScanStart, onScanEnd }) {
           }}>
             <span style={{ fontSize: 16, color: "var(--amber)", flexShrink: 0, marginTop: 1 }}>{d.icon}</span>
             <div>
-              <div style={{ fontSize: 12, fontWeight: 700, fontFamily: "Syne", marginBottom: 2 }}>{d.label}</div>
+              <div style={{ fontSize: 12, fontWeight: 700, fontFamily: "Sora", marginBottom: 2 }}>{d.label}</div>
               <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.5 }}>{d.detail}</div>
             </div>
           </div>

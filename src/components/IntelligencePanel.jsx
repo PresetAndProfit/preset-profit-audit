@@ -7,11 +7,11 @@ const fmtMoney = cents => `$${Math.round((cents || 0) / 100).toLocaleString()}`;
 export default function IntelligencePanel({ audits }) {
   if (!audits.length) return (
     <div className="page-pad" style={{ animation: "fadeUp .4s ease" }}>
-      <h1 style={{ fontFamily: "Syne", fontSize: 26, fontWeight: 800, letterSpacing: "-0.02em", marginBottom: 6 }}>Intelligence Panel</h1>
+      <h1 style={{ fontFamily: "Sora", fontSize: 26, fontWeight: 800, letterSpacing: "-0.02em", marginBottom: 6 }}>Intelligence Panel</h1>
       <p style={{ color: "var(--muted)", fontSize: 13, marginBottom: 40 }}>Aggregated insights across all audited businesses</p>
       <div style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 8, padding: "60px 24px", textAlign: "center" }}>
         <div style={{ fontSize: 32, marginBottom: 12 }}>◆</div>
-        <div style={{ fontFamily: "Syne", fontWeight: 700, fontSize: 16, marginBottom: 8 }}>No data yet</div>
+        <div style={{ fontFamily: "Sora", fontWeight: 700, fontSize: 16, marginBottom: 8 }}>No data yet</div>
         <div style={{ color: "var(--muted)", fontSize: 13 }}>Run at least one audit to unlock intelligence insights.</div>
       </div>
     </div>
@@ -29,7 +29,7 @@ export default function IntelligencePanel({ audits }) {
 
   return (
     <div className="page-pad" style={{ animation: "fadeUp .4s ease" }}>
-      <h1 style={{ fontFamily: "Syne", fontSize: 26, fontWeight: 800, letterSpacing: "-0.02em", marginBottom: 6 }}>Intelligence Panel</h1>
+      <h1 style={{ fontFamily: "Sora", fontSize: 26, fontWeight: 800, letterSpacing: "-0.02em", marginBottom: 6 }}>Intelligence Panel</h1>
       <p style={{ color: "var(--muted)", fontSize: 13, marginBottom: 28 }}>Aggregated insights across {audits.length} audited businesses</p>
 
       {/* Pipeline funnel + value — the Growth OS at a glance */}
@@ -69,7 +69,7 @@ export default function IntelligencePanel({ audits }) {
         </div>
         <div style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 8, padding: "20px 24px" }}>
           <div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Avg Monthly Opportunity</div>
-          <div style={{ fontFamily: "Syne", fontSize: 28, fontWeight: 800, color: "var(--green)" }}>${avgRevenue.toLocaleString()}/mo</div>
+          <div style={{ fontFamily: "Sora", fontSize: 28, fontWeight: 800, color: "var(--green)" }}>${avgRevenue.toLocaleString()}/mo</div>
         </div>
       </div>
 
@@ -105,7 +105,7 @@ export default function IntelligencePanel({ audits }) {
                   <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{a.industry} · {a.goal}</div>
                 </div>
                 <div style={{ textAlign: "right" }}>
-                  <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 16, color: "var(--green)" }}>{a.revenueOpportunity}</div>
+                  <div style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 16, color: "var(--green)" }}>{a.revenueOpportunity}</div>
                   <Tag color={STATUS_COLORS[a.status]}>{a.status}</Tag>
                 </div>
               </div>

@@ -53,14 +53,14 @@ export default function AgencyConsole({ audits = [], updateDeal, branding = null
         {branding?.logoUrl
           ? <img src={branding.logoUrl} alt={branding.name || "logo"} style={{ height: 30, maxWidth: 160, objectFit: "contain" }} onError={e => { e.currentTarget.style.display = "none"; }} />
           : <div style={{ width: 28, height: 28, borderRadius: 6, background: branding?.color || "var(--amber)" }} />}
-        <h1 style={{ fontFamily: "Syne", fontSize: 24, fontWeight: 800, letterSpacing: "-0.02em" }}>{branding?.name || "Agency"} Console</h1>
+        <h1 style={{ fontFamily: "Sora", fontSize: 24, fontWeight: 800, letterSpacing: "-0.02em" }}>{branding?.name || "Agency"} Console</h1>
       </div>
       <p style={{ color: "var(--muted)", fontSize: 13, marginBottom: 24 }}>Every client's pipeline, white-labeled, in one place. Assign deals to clients and ship branded share links.</p>
 
       {audits.length === 0 && (
         <div style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 8, padding: "60px 24px", textAlign: "center" }}>
           <div style={{ fontSize: 32, marginBottom: 12 }}>❖</div>
-          <div style={{ fontFamily: "Syne", fontWeight: 700, fontSize: 16, marginBottom: 8 }}>No client deals yet</div>
+          <div style={{ fontFamily: "Sora", fontWeight: 700, fontSize: 16, marginBottom: 8 }}>No client deals yet</div>
           <div style={{ color: "var(--muted)", fontSize: 13 }}>Run audits for your clients to populate the console.</div>
         </div>
       )}
@@ -71,7 +71,7 @@ export default function AgencyConsole({ audits = [], updateDeal, branding = null
           return (
             <div key={client} style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 20px", borderBottom: "1px solid var(--border)", flexWrap: "wrap", gap: 8 }}>
-                <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 16 }}>{client}</div>
+                <div style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 16 }}>{client}</div>
                 <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                   <span style={{ fontSize: 11, color: "var(--muted)" }}>{deals.length} deal{deals.length !== 1 ? "s" : ""}</span>
                   <Tag color="var(--amber)">{fmtMoney(agg.openValueCents)} open</Tag>

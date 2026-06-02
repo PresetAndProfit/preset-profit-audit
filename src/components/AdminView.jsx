@@ -29,7 +29,7 @@ export default function AdminView() {
   const [tab, setTab] = useState("Overview");
   return (
     <div className="page-pad" style={{ maxWidth: 1100, margin: "0 auto", animation: "fadeUp .4s ease" }}>
-      <h1 style={{ fontFamily: "Syne", fontSize: 24, fontWeight: 800, marginBottom: 4 }}>Admin Command Center</h1>
+      <h1 style={{ fontFamily: "Sora", fontSize: 24, fontWeight: 800, marginBottom: 4 }}>Admin Command Center</h1>
       <p style={{ color: "var(--muted)", fontSize: 13, marginBottom: 20 }}>Operate the Preset &amp; Profit platform — metrics, users, audits, revenue, and system controls.</p>
 
       <div style={{ display: "flex", gap: 2, marginBottom: 20, background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 8, padding: 4, width: "fit-content", flexWrap: "wrap" }}>
@@ -182,7 +182,7 @@ function UserDrawer({ user, onClose, onChanged }) {
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 40, display: "flex", justifyContent: "flex-end" }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "min(420px, 92vw)", height: "100%", background: "var(--panel)", borderLeft: "1px solid var(--border)", padding: 24, overflowY: "auto", animation: "fadeUp .25s ease" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <h2 style={{ fontFamily: "Syne", fontSize: 18, fontWeight: 800 }}>Manage account</h2>
+          <h2 style={{ fontFamily: "Sora", fontSize: 18, fontWeight: 800 }}>Manage account</h2>
           <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 18 }}>✕</button>
         </div>
         <div style={{ fontSize: 13, marginBottom: 4 }}>{user.email}{user.is_admin ? " ★" : ""}</div>
@@ -269,12 +269,12 @@ function AuditDetail({ auditId, onClose }) {
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 40, display: "flex", justifyContent: "flex-end" }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "min(560px, 94vw)", height: "100%", background: "var(--panel)", borderLeft: "1px solid var(--border)", padding: 24, overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <h2 style={{ fontFamily: "Syne", fontSize: 18, fontWeight: 800 }}>Audit detail</h2>
+          <h2 style={{ fontFamily: "Sora", fontSize: 18, fontWeight: 800 }}>Audit detail</h2>
           <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 18 }}>✕</button>
         </div>
         {loading ? <Loading /> : error ? <ErrorBox error={error} /> : !a ? <div style={{ color: "var(--muted)", fontSize: 12 }}>Not found.</div> : (
           <div style={{ display: "grid", gap: 12 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "Syne" }}>{a.business_name || "—"}</div>
+            <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "Sora" }}>{a.business_name || "—"}</div>
             <div style={{ fontSize: 12, color: "var(--muted)" }}>{a.url} · Score {a.overall_score ?? "—"} · {new Date(a.created_at).toLocaleString()}</div>
             {a.data?.detectedBusinessType?.label && <div style={{ fontSize: 12 }}><Tag color="var(--amber)">{a.data.detectedBusinessType.label}</Tag></div>}
             {a.data?.executiveSummary && (
@@ -306,7 +306,7 @@ function Revenue() {
         <div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>Revenue run-rate</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 14 }}>
           {[["Daily", r.runRate.daily], ["Weekly", r.runRate.weekly], ["Monthly", r.runRate.monthly]].map(([l, v]) => (
-            <div key={l}><div style={{ fontSize: 22, fontFamily: "Syne", fontWeight: 800, color: "var(--green)" }}>{money(v)}</div><div style={{ fontSize: 11, color: "var(--muted)" }}>{l}</div></div>
+            <div key={l}><div style={{ fontSize: 22, fontFamily: "Sora", fontWeight: 800, color: "var(--green)" }}>{money(v)}</div><div style={{ fontSize: 11, color: "var(--muted)" }}>{l}</div></div>
           ))}
         </div>
         <div style={{ fontSize: 10.5, color: "var(--dim)", marginTop: 10 }}>Run-rate is modeled from active subscriptions (MRR), not Stripe-settled cash.</div>
@@ -315,7 +315,7 @@ function Revenue() {
         <div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>New upgrades</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 14 }}>
           {[["Today", r.newUpgrades.today], ["7 days", r.newUpgrades.week], ["This month", r.newUpgrades.month]].map(([l, v]) => (
-            <div key={l}><div style={{ fontSize: 22, fontFamily: "Syne", fontWeight: 800 }}>{v}</div><div style={{ fontSize: 11, color: "var(--muted)" }}>{l}</div></div>
+            <div key={l}><div style={{ fontSize: 22, fontFamily: "Sora", fontWeight: 800 }}>{v}</div><div style={{ fontSize: 11, color: "var(--muted)" }}>{l}</div></div>
           ))}
         </div>
       </Panel>
@@ -412,7 +412,7 @@ function EmailDetail({ id, onClose, onResent }) {
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 40, display: "flex", justifyContent: "flex-end" }}>
       <div onClick={(ev) => ev.stopPropagation()} style={{ width: "min(480px, 94vw)", height: "100%", background: "var(--panel)", borderLeft: "1px solid var(--border)", padding: 24, overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <h2 style={{ fontFamily: "Syne", fontSize: 18, fontWeight: 800 }}>Email detail</h2>
+          <h2 style={{ fontFamily: "Sora", fontSize: 18, fontWeight: 800 }}>Email detail</h2>
           <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 18 }}>✕</button>
         </div>
         {loading ? <Loading /> : error ? <ErrorBox error={error} /> : !e ? <div style={{ color: "var(--muted)", fontSize: 12 }}>Not found.</div> : (

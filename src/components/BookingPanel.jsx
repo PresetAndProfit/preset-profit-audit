@@ -38,7 +38,7 @@ export default function BookingPanel() {
 
   return (
     <div style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 10, padding: 24, marginBottom: 24 }}>
-      <h2 style={{ fontFamily: "Syne", fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Booking &amp; outreach identity</h2>
+      <h2 style={{ fontFamily: "Sora", fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Booking &amp; outreach identity</h2>
       <p style={{ color: "var(--muted)", fontSize: 12, marginBottom: 18, lineHeight: 1.6 }}>
         Your booking link is embedded into generated outreach and your proposal's "Book the call" button — so every prospect can book a real call with you. Set it once.
       </p>

@@ -27,13 +27,13 @@ export default function PipelineBoard({ audits, updateDeal, onViewReport, onView
   const stat = (label, value, color) => (
     <div style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 8, padding: "12px 16px", minWidth: 130 }}>
       <div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>{label}</div>
-      <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 20, color: color || "var(--text)" }}>{value}</div>
+      <div style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 20, color: color || "var(--text)" }}>{value}</div>
     </div>
   );
 
   return (
     <div className="page-pad" style={{ animation: "fadeUp .4s ease" }}>
-      <h1 style={{ fontFamily: "Syne", fontSize: 26, fontWeight: 800, letterSpacing: "-0.02em", marginBottom: 6 }}>Sales Pipeline</h1>
+      <h1 style={{ fontFamily: "Sora", fontSize: 26, fontWeight: 800, letterSpacing: "-0.02em", marginBottom: 6 }}>Sales Pipeline</h1>
       <p style={{ color: "var(--muted)", fontSize: 13, marginBottom: 18 }}>Every audit is a deal. Work it from lead to closed-won to automation sold.</p>
 
       {/* Aggregate header */}
@@ -61,7 +61,7 @@ export default function PipelineBoard({ audits, updateDeal, onViewReport, onView
       {audits.length === 0 && (
         <div style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 8, padding: "60px 24px", textAlign: "center", marginTop: 16 }}>
           <div style={{ fontSize: 32, marginBottom: 12 }}>◎</div>
-          <div style={{ fontFamily: "Syne", fontWeight: 700, fontSize: 16, marginBottom: 8 }}>No deals yet</div>
+          <div style={{ fontFamily: "Sora", fontWeight: 700, fontSize: 16, marginBottom: 8 }}>No deals yet</div>
           <div style={{ color: "var(--muted)", fontSize: 13 }}>Run an audit to drop your first prospect into the pipeline.</div>
         </div>
       )}
@@ -77,7 +77,7 @@ export default function PipelineBoard({ audits, updateDeal, onViewReport, onView
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 10px", borderBottom: `2px solid ${s.color}`, marginBottom: 10 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <div style={{ width: 8, height: 8, borderRadius: "50%", background: s.color }} />
-                    <span style={{ fontFamily: "Syne", fontWeight: 700, fontSize: 12 }}>{s.label}</span>
+                    <span style={{ fontFamily: "Sora", fontWeight: 700, fontSize: 12 }}>{s.label}</span>
                     <span style={{ fontSize: 10, color: "var(--muted)" }}>{deals.length}</span>
                   </div>
                   {colValue > 0 && <span style={{ fontSize: 10, color: "var(--muted)" }}>{fmtMoney(colValue)}</span>}

@@ -33,7 +33,7 @@ const ERRORS = {
 };
 const errMsg = (e) => ERRORS[e] || "Something went wrong. Please try again.";
 
-const findingColor = (s) => (s === "good" ? "var(--green)" : s === "warn" ? "var(--amber)" : "var(--red)");
+const findingColor = (s) => (s === "good" ? "var(--green)" : s === "warn" ? "var(--warn)" : "var(--red)");
 const findingIcon = (s) => (s === "good" ? "✓" : s === "warn" ? "⚠" : "✗");
 
 function FindingRow({ f }) {
@@ -85,19 +85,19 @@ export default function PublicAudit() {
     : <a href="mailto:hello@presetprofit.com" style={ctaBtn}>{label}</a>;
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg, #0a0a0f)" }}>
+    <div style={{ minHeight: "100vh", background: "var(--bg, #08080a)" }}>
       <GlobalStyles />
       <div style={{ maxWidth: 760, margin: "0 auto", padding: "32px 20px 80px" }}>
         {/* Brand */}
-        <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 18, marginBottom: 32 }}>
-          <span style={{ color: "var(--amber)" }}>PRESET</span><span style={{ color: "var(--text)" }}>&amp;PROFIT</span>
+        <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontWeight: 500, fontSize: 24, letterSpacing: "0.3px", color: "var(--text)", marginBottom: 32 }}>
+          Preset <span style={{ color: "var(--gold)" }}>&amp;</span> Profit
         </div>
 
         {/* ── FORM ── */}
         {(phase === "form" || phase === "scanning") && (
           <div style={{ animation: "fadeUp .4s ease" }}>
             <div style={{ fontSize: 11, color: "var(--amber)", letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: 14, fontWeight: 600 }}>Free 30-second business audit</div>
-            <h1 style={{ fontFamily: "Syne", fontSize: 34, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.15, marginBottom: 16 }}>
+            <h1 style={{ fontFamily: "Sora", fontSize: 34, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.15, marginBottom: 16 }}>
               See exactly where your business is losing customers
             </h1>
             <p style={{ color: "var(--muted)", fontSize: 15, lineHeight: 1.7, maxWidth: 520, marginBottom: 28 }}>
@@ -130,7 +130,7 @@ export default function PublicAudit() {
               ].map(([n, h2, b]) => (
                 <div key={n} style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 10, padding: "18px 20px" }}>
                   <div style={{ width: 26, height: 26, borderRadius: "50%", background: "var(--amber-glow)", border: "1px solid var(--amber)", color: "var(--amber)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, marginBottom: 10 }}>{n}</div>
-                  <div style={{ fontFamily: "Syne", fontWeight: 700, fontSize: 14, marginBottom: 5 }}>{h2}</div>
+                  <div style={{ fontFamily: "Sora", fontWeight: 700, fontSize: 14, marginBottom: 5 }}>{h2}</div>
                   <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6 }}>{b}</div>
                 </div>
               ))}
@@ -142,7 +142,7 @@ export default function PublicAudit() {
         {(phase === "teaser" || phase === "submitting" || phase === "unlocked") && r && (
           <div style={{ animation: "fadeUp .4s ease" }}>
             <button onClick={() => { setPhase("form"); setRes(null); }} style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 12, marginBottom: 12, fontFamily: "IBM Plex Mono" }}>← Run another</button>
-            <h1 style={{ fontFamily: "Syne", fontSize: 26, fontWeight: 800, letterSpacing: "-0.01em", marginBottom: 4 }}>{r.businessName}</h1>
+            <h1 style={{ fontFamily: "Sora", fontSize: 26, fontWeight: 800, letterSpacing: "-0.01em", marginBottom: 4 }}>{r.businessName}</h1>
             <div style={{ display: "flex", gap: 8, marginBottom: 22, flexWrap: "wrap" }}>
               <Tag color="#6b6b85">{r.industry}</Tag>{r.website && <Tag color="#3a3a50">{r.website}</Tag>}
             </div>
@@ -157,7 +157,7 @@ export default function PublicAudit() {
               ))}
               <div style={{ background: "rgba(0,214,143,0.06)", border: "1px solid rgba(0,214,143,0.3)", borderRadius: 10, padding: 18 }}>
                 <div style={{ fontSize: 10, color: "var(--green)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>Revenue you're leaving on the table</div>
-                <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 22, color: "var(--green)" }}>{r.revenueOpportunity || r.totalMonthlyOpportunity}</div>
+                <div style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 22, color: "var(--green)" }}>{r.revenueOpportunity || r.totalMonthlyOpportunity}</div>
               </div>
             </div>
 
@@ -186,7 +186,7 @@ export default function PublicAudit() {
             {/* Email gate */}
             {phase !== "unlocked" ? (
               <div style={{ background: "var(--panel)", border: "1px solid var(--amber)", borderRadius: 10, padding: "22px 24px" }}>
-                <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 17, marginBottom: 6 }}>Unlock your full audit + fix plan</div>
+                <div style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 17, marginBottom: 6 }}>Unlock your full audit + fix plan</div>
                 <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.6, marginBottom: 16 }}>See every gap, the recommended fixes, and exactly how to recover that {r.revenueOpportunity || r.totalMonthlyOpportunity}. We'll email you a copy too.</p>
                 <form onSubmit={unlock} style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                   <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required placeholder="you@business.com" disabled={phase === "submitting"} style={{ ...input, flex: 1, minWidth: 220 }} />
@@ -213,7 +213,7 @@ export default function PublicAudit() {
 
                 {/* Booked-call CTA — the conversion goal */}
                 <div style={{ background: "var(--panel)", border: "1px solid var(--amber)", borderRadius: 12, padding: "28px 26px", textAlign: "center" }}>
-                  <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 20, marginBottom: 8 }}>Want us to fix this for you?</div>
+                  <div style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 20, marginBottom: 8 }}>Want us to fix this for you?</div>
                   <p style={{ fontSize: 14, color: "var(--muted)", lineHeight: 1.7, maxWidth: 440, margin: "0 auto 20px" }}>
                     Book a free 15-minute call. We'll walk through your audit and the exact systems to recover {r.revenueOpportunity || r.totalMonthlyOpportunity} — done for you, no tech work on your end.
                   </p>
@@ -228,7 +228,7 @@ export default function PublicAudit() {
         {/* Footer — trust + legal (required for a public commercial page) */}
         <div style={{ marginTop: 56, paddingTop: 20, borderTop: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
           <div style={{ fontSize: 12, color: "var(--muted)" }}>
-            <span style={{ fontFamily: "Syne", fontWeight: 700, color: "var(--text)" }}>Preset &amp; Profit</span> · Live website audits for local businesses
+            <span style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontWeight: 500, fontSize: 15, color: "var(--text)" }}>Preset <span style={{ color: "var(--gold)" }}>&amp;</span> Profit</span> · Independent business intelligence audits
           </div>
           <div style={{ display: "flex", gap: 16, fontSize: 12 }}>
             <a href="/terms" style={{ color: "var(--muted)", textDecoration: "none" }}>Terms</a>

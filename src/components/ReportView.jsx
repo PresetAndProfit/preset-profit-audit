@@ -20,7 +20,7 @@ function EvidenceLine({ label, text, mono, accent }) {
 }
 
 const findingIcon  = s => s === "good" ? "✓" : s === "warn" ? "⚠" : "✗";
-const findingColor = s => s === "good" ? "var(--green)" : s === "warn" ? "var(--amber)" : "var(--red)";
+const findingColor = s => s === "good" ? "var(--green)" : s === "warn" ? "var(--warn)" : "var(--red)";
 const findingBorder = s => s === "good" ? "rgba(0,214,143,0.2)" : s === "warn" ? "rgba(245,166,35,0.2)" : "rgba(255,71,87,0.2)";
 
 // branding: { name, logoUrl, color } | null  (Agency white-label)
@@ -111,7 +111,7 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved, 
           {branding.logoUrl
             ? <img src={branding.logoUrl} alt={branding.name || "logo"} style={{ height: 30, maxWidth: 160, objectFit: "contain" }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
             : <div style={{ width: 28, height: 28, borderRadius: 6, background: branding.color || "var(--amber)" }} />}
-          {branding.name && <span style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 16, color: "var(--text)" }}>{branding.name}</span>}
+          {branding.name && <span style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 16, color: "var(--text)" }}>{branding.name}</span>}
         </div>
       )}
 
@@ -126,7 +126,7 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved, 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12, marginBottom: 22 }}>
         <div>
           {!shared && <button onClick={onBack} style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 12, marginBottom: 8, fontFamily: "IBM Plex Mono" }}>← Back to Dashboard</button>}
-          <h1 style={{ fontFamily: "Syne", fontSize: 22, fontWeight: 800, letterSpacing: "-0.01em" }}>{r.businessName}</h1>
+          <h1 style={{ fontFamily: "Sora", fontSize: 22, fontWeight: 800, letterSpacing: "-0.01em" }}>{r.businessName}</h1>
           <div style={{ fontSize: 11, color: "var(--amber)", letterSpacing: "0.08em", textTransform: "uppercase", marginTop: 4 }}>
             Automation Opportunity Report{r.createdAt ? ` · Prepared ${new Date(r.createdAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}` : ""}
           </div>
@@ -176,7 +176,7 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved, 
           <div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>
             Revenue You're Leaving on the Table
           </div>
-          <div style={{ fontSize: 22, fontFamily: "Syne", fontWeight: 800, color: "var(--green)" }}>{liveTotalMonthly}</div>
+          <div style={{ fontSize: 22, fontFamily: "Sora", fontWeight: 800, color: "var(--green)" }}>{liveTotalMonthly}</div>
           <div style={{ fontSize: 11, color: "var(--green)", marginTop: 2, fontWeight: 600 }}>≈ {liveAnnual} every year</div>
           <button onClick={() => setTab("what to fix")} style={{ background: "none", border: "none", padding: 0, marginTop: 6, textAlign: "left", cursor: "pointer", fontSize: 10, color: "var(--muted)", lineHeight: 1.5 }}>
             {r.estimateBasis || `Estimated from ~${r.assumptions?.monthlyJobs} jobs/mo`}.{" "}
@@ -190,7 +190,7 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved, 
         <div onClick={() => onGenerateRoadmap(r)} style={{ cursor: "pointer", background: "linear-gradient(90deg, rgba(245,166,35,0.12), rgba(245,166,35,0.04))", border: "1px solid var(--amber)", borderRadius: 10, padding: "16px 20px", marginBottom: 14, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
           <div style={{ fontSize: 26, flexShrink: 0 }}>⚡</div>
           <div style={{ flex: 1, minWidth: 220 }}>
-            <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 16, marginBottom: 3 }}>
+            <div style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 16, marginBottom: 3 }}>
               Turn this audit into a done-for-you Automation Roadmap
             </div>
             <div style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.6 }}>
@@ -206,7 +206,7 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved, 
         <div style={{ background: "var(--panel)", border: "1px solid rgba(0,214,143,0.3)", borderLeft: "3px solid var(--green)", borderRadius: 8, padding: "14px 18px", marginBottom: 14 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
             <span style={{ color: "var(--green)", fontSize: 14 }}>✓</span>
-            <span style={{ fontSize: 13, fontWeight: 700, fontFamily: "Syne" }}>We scanned your live website</span>
+            <span style={{ fontSize: 13, fontWeight: 700, fontFamily: "Sora" }}>We scanned your live website</span>
             <span style={{ fontSize: 11, color: "var(--muted)" }}>{r.siteSignals.finalUrl}{r.scannedAt ? ` · ${new Date(r.scannedAt).toLocaleDateString()}` : ""}</span>
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -281,7 +281,7 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved, 
           <div style={{ background: "var(--panel)", border: "1px solid rgba(245,166,35,0.4)", borderRadius: 10, padding: "22px 24px", position: "relative", overflow: "hidden" }}>
             <div style={{ position: "absolute", top: 0, right: 0, width: 200, height: 200, background: "radial-gradient(circle at top right,rgba(245,166,35,0.06),transparent 70%)", pointerEvents: "none" }} />
             <div style={{ fontSize: 10, color: "var(--amber)", textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 6 }}>◈ What We Recommend for {r.businessName}</div>
-            <div style={{ fontFamily: "Syne", fontSize: 20, fontWeight: 800, marginBottom: 8 }}>{r.recommendation?.name}</div>
+            <div style={{ fontFamily: "Sora", fontSize: 20, fontWeight: 800, marginBottom: 8 }}>{r.recommendation?.name}</div>
             <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7, marginBottom: 12 }}>{r.recommendation?.description}</p>
             {r.recommendation?.benefit && (
               <div style={{ background: "rgba(0,214,143,0.08)", border: "1px solid rgba(0,214,143,0.25)", borderRadius: 6, padding: "10px 14px", marginBottom: 16, display: "flex", gap: 10, alignItems: "flex-start" }}>
@@ -295,14 +295,14 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved, 
               {!shared && (
                 <div style={{ flex: 1, minWidth: 190, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, padding: "12px 16px" }}>
                   <div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>Starting from</div>
-                  <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 24, color: "var(--text)" }}>{r.recommendation?.price}</div>
+                  <div style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 24, color: "var(--text)" }}>{r.recommendation?.price}</div>
                   <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>one-time setup · no ongoing contract</div>
                 </div>
               )}
               {!shared && <div style={{ display: "flex", alignItems: "center", fontSize: 20, color: "var(--amber)", fontWeight: 700 }}>→</div>}
               <div style={{ flex: 1, minWidth: 190, background: "rgba(0,214,143,0.06)", border: "1px solid rgba(0,214,143,0.25)", borderRadius: 8, padding: "12px 16px" }}>
                 <div style={{ fontSize: 10, color: "var(--green)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>Extra revenue</div>
-                <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 24, color: "var(--green)" }}>{liveTotalMonthly}</div>
+                <div style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 24, color: "var(--green)" }}>{liveTotalMonthly}</div>
                 <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>≈ {liveAnnual} · every month you wait is another {liveTotalMonthly} gone</div>
               </div>
             </div>
@@ -347,7 +347,7 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved, 
           ].map(({ title, findings, score }) => (
             <div key={title} style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 8, overflow: "hidden" }}>
               <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ fontFamily: "Syne", fontWeight: 700, fontSize: 14 }}>{title}</div>
+                <div style={{ fontFamily: "Sora", fontWeight: 700, fontSize: 14 }}>{title}</div>
                 <ScoreRing score={score} size={40} stroke={4} />
               </div>
               <div style={{ padding: "0 20px" }}>
@@ -401,7 +401,7 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved, 
             <span style={{ fontSize: 12, color: "var(--muted)" }}>
               Combined extra revenue {r.businessName} could add each month with these {liveAutomations.length} systems
             </span>
-            <span style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 20, color: "var(--green)", transition: "color .15s" }}>{liveTotalMonthly}</span>
+            <span style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 20, color: "var(--green)", transition: "color .15s" }}>{liveTotalMonthly}</span>
           </div>
 
           {/* Individual system cards — live updating */}
@@ -416,7 +416,7 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved, 
                     <Tag color="#4a9eff">{a.category}</Tag>
                     <Tag color={EFFORT_COLOR[a.effort]}>{a.effort === "low" ? "Quick to set up" : a.effort === "medium" ? "Setup in 1–2 weeks" : "Full build"}</Tag>
                   </div>
-                  <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "Syne", marginBottom: 6 }}>{a.name}</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "Sora", marginBottom: 6 }}>{a.name}</div>
                   {/* Personalized intro — specific to this business */}
                   {a.personalIntro && (
                     <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.65, marginBottom: 6, fontStyle: "italic", borderLeft: "2px solid var(--amber)", paddingLeft: 10 }}>{a.personalIntro}</div>
@@ -425,7 +425,7 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved, 
                 </div>
                 <div style={{ textAlign: "right", flexShrink: 0 }}>
                   <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 2, letterSpacing: "0.06em" }}>EXTRA / MONTH</div>
-                  <div style={{ fontSize: 26, fontFamily: "Syne", fontWeight: 800, color: "var(--green)" }}>{a.roi}</div>
+                  <div style={{ fontSize: 26, fontFamily: "Sora", fontWeight: 800, color: "var(--green)" }}>{a.roi}</div>
                 </div>
               </div>
 
@@ -485,7 +485,7 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved, 
         <div style={{ display: "grid", gap: 14 }}>
           {[r.thirtyDayPlan.phase1, r.thirtyDayPlan.phase2, r.thirtyDayPlan.phase3].map((phase, idx) => (
             <div key={idx} style={{ background: "var(--panel)", border: `1px solid ${PHASE_COLORS[idx]}30`, borderLeft: `3px solid ${PHASE_COLORS[idx]}`, borderRadius: 8, padding: "20px 24px" }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: PHASE_COLORS[idx], fontFamily: "Syne", marginBottom: 14 }}>Phase {idx + 1}: {phase.title}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: PHASE_COLORS[idx], fontFamily: "Sora", marginBottom: 14 }}>Phase {idx + 1}: {phase.title}</div>
               <div style={{ display: "grid", gap: 10 }}>
                 {phase.actions.map((action, ai) => (
                   <div key={ai} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>

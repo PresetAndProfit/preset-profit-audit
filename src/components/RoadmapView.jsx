@@ -20,7 +20,7 @@ function HeroStat({ label, value, sub, accent }) {
   return (
     <div style={{ background: "var(--panel)", border: `1px solid ${accent ? "rgba(0,214,143,0.3)" : "var(--border)"}`, borderRadius: 8, padding: "16px 18px" }}>
       <div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>{label}</div>
-      <div style={{ fontSize: 24, fontFamily: "Syne", fontWeight: 800, color: accent ? "var(--green)" : "var(--text)", lineHeight: 1 }}>{value}</div>
+      <div style={{ fontSize: 24, fontFamily: "Sora", fontWeight: 800, color: accent ? "var(--green)" : "var(--text)", lineHeight: 1 }}>{value}</div>
       {sub && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 5, lineHeight: 1.4 }}>{sub}</div>}
     </div>
   );
@@ -52,7 +52,7 @@ export default function RoadmapView({ report: r, onBack, branding = null, waterm
     return (
       <div className="page-pad" style={{ animation: "fadeUp .4s ease", maxWidth: 680 }}>
         <button onClick={onBack} style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 12, marginBottom: 8, fontFamily: "IBM Plex Mono" }}>← Back to Report</button>
-        <h1 style={{ fontFamily: "Syne", fontSize: 22, fontWeight: 800 }}>{rm.business.name} — Automation Roadmap</h1>
+        <h1 style={{ fontFamily: "Sora", fontSize: 22, fontWeight: 800 }}>{rm.business.name} — Automation Roadmap</h1>
         <div style={{ background: "var(--panel)", border: "1px solid var(--amber)", borderRadius: 10, padding: "22px 24px", marginTop: 16 }}>
           <div style={{ fontSize: 10, color: "var(--amber)", textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 8 }}>Honest assessment</div>
           <p style={{ fontSize: 13, lineHeight: 1.75 }}>{rm.proposal.opportunityStatement}</p>
@@ -81,7 +81,7 @@ export default function RoadmapView({ report: r, onBack, branding = null, waterm
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12, marginBottom: 20 }}>
         <div>
           <button onClick={onBack} style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 12, marginBottom: 8, fontFamily: "IBM Plex Mono" }}>← Back to Report</button>
-          <h1 style={{ fontFamily: "Syne", fontSize: 22, fontWeight: 800, letterSpacing: "-0.01em" }}>{rm.business.name} — Automation Roadmap</h1>
+          <h1 style={{ fontFamily: "Sora", fontSize: 22, fontWeight: 800, letterSpacing: "-0.01em" }}>{rm.business.name} — Automation Roadmap</h1>
           <div style={{ fontSize: 11, color: "var(--amber)", letterSpacing: "0.08em", textTransform: "uppercase", marginTop: 4 }}>
             Sales-Ready Proposal · {rm.solutions.length} systems · {t.roiMultiple}× first-year ROI
           </div>
@@ -120,7 +120,7 @@ export default function RoadmapView({ report: r, onBack, branding = null, waterm
         ].map(([l, v, s], i) => (
           <div key={l} style={{ flex: 1, minWidth: 180, padding: "14px 18px", borderRight: i < 2 ? "1px solid var(--border)" : "none" }}>
             <div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 5 }}>{l}</div>
-            <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 18 }}>{v}</div>
+            <div style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 18 }}>{v}</div>
             <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 3 }}>{s}</div>
           </div>
         ))}
@@ -131,12 +131,12 @@ export default function RoadmapView({ report: r, onBack, branding = null, waterm
         <div style={{ background: "var(--panel)", border: "1px solid var(--amber)", borderRadius: 10, padding: "20px 22px", marginBottom: 18, position: "relative", overflow: "hidden" }}>
           <div style={{ position: "absolute", top: 0, right: 0, width: 220, height: 220, background: "radial-gradient(circle at top right,rgba(245,166,35,0.08),transparent 70%)", pointerEvents: "none" }} />
           <div style={{ fontSize: 10, color: "var(--amber)", textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 6 }}>◈ Recommended Package — best place to start</div>
-          <div style={{ fontFamily: "Syne", fontSize: 20, fontWeight: 800, marginBottom: 8 }}>{rm.bundle.name}</div>
+          <div style={{ fontFamily: "Sora", fontSize: 20, fontWeight: 800, marginBottom: 8 }}>{rm.bundle.name}</div>
           <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7, marginBottom: 14, maxWidth: 620 }}>{rm.bundle.blurb}</p>
           <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-            <div><span style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 24, color: "var(--amber)" }}>{usd(rm.bundle.setup)}</span> <span style={{ fontSize: 12, color: "var(--muted)" }}>setup</span></div>
+            <div><span style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 24, color: "var(--amber)" }}>{usd(rm.bundle.setup)}</span> <span style={{ fontSize: 12, color: "var(--muted)" }}>setup</span></div>
             <span style={{ color: "var(--muted)" }}>+</span>
-            <div><span style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 24, color: "var(--amber)" }}>{usd(rm.bundle.monthly)}</span> <span style={{ fontSize: 12, color: "var(--muted)" }}>/month</span></div>
+            <div><span style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 24, color: "var(--amber)" }}>{usd(rm.bundle.monthly)}</span> <span style={{ fontSize: 12, color: "var(--muted)" }}>/month</span></div>
             {rm.bundle.savings > 0 && (
               <span style={{ marginLeft: "auto", background: "rgba(0,214,143,0.1)", border: "1px solid rgba(0,214,143,0.3)", color: "var(--green)", fontSize: 12, fontWeight: 700, padding: "6px 14px", borderRadius: 20 }}>
                 Save {usd(rm.bundle.savings)} vs à la carte
@@ -165,7 +165,7 @@ export default function RoadmapView({ report: r, onBack, branding = null, waterm
           {rm.roadmap.phases.map((p, idx) => (
             <div key={p.key} style={{ background: "var(--panel)", border: `1px solid ${PHASE_COLORS[idx]}30`, borderLeft: `3px solid ${PHASE_COLORS[idx]}`, borderRadius: 8, padding: "20px 24px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
-                <div style={{ fontSize: 14, fontWeight: 800, color: PHASE_COLORS[idx], fontFamily: "Syne" }}>{p.title}</div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: PHASE_COLORS[idx], fontFamily: "Sora" }}>{p.title}</div>
                 <div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em" }}>{p.timeframe}</div>
               </div>
               <p style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6, marginBottom: 14 }}>{p.objective}</p>
@@ -178,7 +178,7 @@ export default function RoadmapView({ report: r, onBack, branding = null, waterm
                       <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>{s.buildLabel} · {usd(s.setup)} setup · {usd(s.monthly)}/mo</div>
                     </div>
                     <div style={{ textAlign: "right", flexShrink: 0 }}>
-                      <div style={{ fontSize: 15, fontFamily: "Syne", fontWeight: 800, color: "var(--green)" }}>{usd(s.monthlyImpact)}</div>
+                      <div style={{ fontSize: 15, fontFamily: "Sora", fontWeight: 800, color: "var(--green)" }}>{usd(s.monthlyImpact)}</div>
                       <div style={{ fontSize: 9, color: "var(--muted)" }}>/mo recovered</div>
                     </div>
                   </div>
@@ -202,7 +202,7 @@ export default function RoadmapView({ report: r, onBack, branding = null, waterm
                     <Tag color={EFFORT_COLOR[s.effort]}>{s.effort === "low" ? "Live in days" : s.effort === "medium" ? "1–2 week build" : "Premium build"}</Tag>
                     <Tag color="var(--green)">{s.roiMultiple}× ROI</Tag>
                   </div>
-                  <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "Syne", marginBottom: 8 }}>{s.consumerName}</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "Sora", marginBottom: 8 }}>{s.consumerName}</div>
                   {s.addressedWeaknesses.length > 0 && (
                     <div style={{ fontSize: 12, color: "var(--text)", lineHeight: 1.6, marginBottom: 6, borderLeft: "2px solid var(--red)", paddingLeft: 10 }}>
                       <span style={{ color: "var(--red)", fontWeight: 600 }}>Fixes:</span> {s.addressedWeaknesses.map(w => w.issue).join(" · ")}
@@ -212,7 +212,7 @@ export default function RoadmapView({ report: r, onBack, branding = null, waterm
                 </div>
                 <div style={{ textAlign: "right", flexShrink: 0, maxWidth: 180 }}>
                   <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 2, letterSpacing: "0.06em" }}>RECOVERS / MONTH</div>
-                  <div style={{ fontSize: 26, fontFamily: "Syne", fontWeight: 800, color: "var(--green)" }}>{usd(s.monthlyImpact)}</div>
+                  <div style={{ fontSize: 26, fontFamily: "Sora", fontWeight: 800, color: "var(--green)" }}>{usd(s.monthlyImpact)}</div>
                   <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 4, lineHeight: 1.4 }}>{s.impactBasis}</div>
                 </div>
               </div>
@@ -225,7 +225,7 @@ export default function RoadmapView({ report: r, onBack, branding = null, waterm
                 ].map(([l, v], ci) => (
                   <div key={l} style={{ padding: "11px 16px", borderRight: ci < 3 ? "1px solid var(--border)" : "none" }}>
                     <div style={{ fontSize: 9, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 3 }}>{l}</div>
-                    <div style={{ fontSize: 14, fontWeight: 800, fontFamily: "Syne", color: ci === 3 ? "var(--amber)" : "var(--text)" }}>{v}</div>
+                    <div style={{ fontSize: 14, fontWeight: 800, fontFamily: "Sora", color: ci === 3 ? "var(--amber)" : "var(--text)" }}>{v}</div>
                   </div>
                 ))}
               </div>
@@ -251,7 +251,7 @@ export default function RoadmapView({ report: r, onBack, branding = null, waterm
               </div>
             ))}
             <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr", padding: "14px 18px", fontSize: 14, alignItems: "center", background: "var(--surface)", fontWeight: 800 }}>
-              <div style={{ fontFamily: "Syne" }}>Total</div>
+              <div style={{ fontFamily: "Sora" }}>Total</div>
               <div style={{ textAlign: "right", fontFamily: "IBM Plex Mono" }}>{usd(t.setup)}</div>
               <div style={{ textAlign: "right", fontFamily: "IBM Plex Mono" }}>{usd(t.monthly)}</div>
               <div style={{ textAlign: "right", fontFamily: "IBM Plex Mono", color: "var(--green)" }}>{usd(t.monthlyImpact)}</div>
@@ -262,12 +262,12 @@ export default function RoadmapView({ report: r, onBack, branding = null, waterm
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             <div style={{ background: "rgba(0,214,143,0.06)", border: "1px solid rgba(0,214,143,0.25)", borderRadius: 8, padding: 20 }}>
               <div style={{ fontSize: 11, color: "var(--green)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Year-one return</div>
-              <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 30, color: "var(--green)" }}>{usd(t.annualImpact)}</div>
+              <div style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 30, color: "var(--green)" }}>{usd(t.annualImpact)}</div>
               <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 6, lineHeight: 1.6 }}>Net of all setup + 12 months of management: <strong style={{ color: "var(--green)" }}>{usd(t.firstYearNet)}</strong> kept.</div>
             </div>
             <div style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 8, padding: 20 }}>
               <div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Total year-one investment</div>
-              <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 30, color: "var(--text)" }}>{usd(t.firstYearCost)}</div>
+              <div style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 30, color: "var(--text)" }}>{usd(t.firstYearCost)}</div>
               <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 6, lineHeight: 1.6 }}>{usd(t.setup)} setup + {usd(t.monthly)}/mo × 12. Blended payback in {t.paybackText}.</div>
             </div>
           </div>
@@ -325,7 +325,7 @@ export default function RoadmapView({ report: r, onBack, branding = null, waterm
           </div>
 
           <div style={{ background: "var(--panel)", border: "1px solid var(--amber)", borderRadius: 10, padding: "22px 24px", textAlign: "center" }}>
-            <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 18, marginBottom: 8 }}>Ready to recover {usd(t.monthlyImpact)}/month?</div>
+            <div style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 18, marginBottom: 8 }}>Ready to recover {usd(t.monthlyImpact)}/month?</div>
             <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7, marginBottom: 16, maxWidth: 520, margin: "0 auto 16px" }}>{rm.proposal.cta}</p>
             <Btn onClick={download} variant={sent ? "success" : "primary"}>{sent ? "✓ Proposal Downloaded" : "↓ Download the Full Proposal PDF"}</Btn>
           </div>

@@ -33,7 +33,7 @@ export default function DealUpsell({ deal, updateDeal, won = false }) {
       <div style={{ fontSize: 10, color: won ? "var(--green)" : "var(--amber)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>
         {won ? "💰 Sell the Automation" : "Recommended Package"}
       </div>
-      <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 15, marginBottom: 4 }}>{offer.name}</div>
+      <div style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 15, marginBottom: 4 }}>{offer.name}</div>
       <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 10 }}>{usd(offer.setup)} setup + {usd(offer.monthly)}/mo</div>
 
       <div style={{ display: "grid", gap: 6, marginBottom: 10 }}>

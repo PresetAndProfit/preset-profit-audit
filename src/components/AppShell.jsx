@@ -41,7 +41,7 @@ function UpgradePanel({ plan, audits = [], usage, onAccount }) {
     <div className="page-pad" style={{ maxWidth: 560, margin: "0 auto", animation: "fadeUp .4s ease" }}>
       <div style={{ background: "var(--panel)", border: "1px solid var(--amber)", borderRadius: 10, padding: 32, textAlign: "center" }}>
         <div style={{ fontSize: 28, marginBottom: 12 }}>🚀</div>
-        <h1 style={{ fontFamily: "Syne", fontSize: 21, fontWeight: 800, marginBottom: 10, lineHeight: 1.3 }}>{offer.headline}</h1>
+        <h1 style={{ fontFamily: "Sora", fontSize: 21, fontWeight: 800, marginBottom: 10, lineHeight: 1.3 }}>{offer.headline}</h1>
         <p style={{ color: "var(--muted)", fontSize: 13, marginBottom: 22, lineHeight: 1.7 }}>{offer.sub}</p>
         <UpgradeButton planId={offer.planId}>Go Unlimited — $49/mo →</UpgradeButton>
         <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 10 }}>14-day free trial · cancel anytime</div>
@@ -58,10 +58,10 @@ function MaintenanceScreen({ onSignOut }) {
   return (
     <>
       <GlobalStyles />
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: "var(--bg, #0a0a0f)" }}>
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: "var(--bg, #08080a)" }}>
         <div style={{ maxWidth: 440, textAlign: "center" }}>
           <div style={{ fontSize: 40, marginBottom: 16 }}>🛠️</div>
-          <h1 style={{ fontFamily: "Syne", fontSize: 24, fontWeight: 800, marginBottom: 10 }}>We'll be right back</h1>
+          <h1 style={{ fontFamily: "Sora", fontSize: 24, fontWeight: 800, marginBottom: 10 }}>We'll be right back</h1>
           <p style={{ color: "var(--muted)", fontSize: 14, lineHeight: 1.7, marginBottom: 20 }}>
             Preset &amp; Profit is undergoing scheduled maintenance. Your data is safe — please check back shortly.
           </p>
@@ -170,9 +170,8 @@ export default function AppShell() {
 
       {/* Mobile top bar */}
       <div className="mobile-bar" style={{ position: "fixed", top: 0, left: 0, right: 0, height: 52, background: "var(--panel)", borderBottom: "1px solid var(--border)", zIndex: 30, alignItems: "center", justifyContent: "space-between", padding: "0 16px" }}>
-        <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 16 }}>
-          <span style={{ color: "var(--amber)" }}>PRESET</span>
-          <span style={{ color: "var(--text)" }}>&amp;PROFIT</span>
+        <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontWeight: 500, fontSize: 21, color: "var(--text)" }}>
+          Preset <span style={{ color: "var(--gold)" }}>&amp;</span> Profit
         </div>
         <button onClick={() => setOpen(o => !o)} style={{ background: "none", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text)", padding: "6px 10px", cursor: "pointer", fontSize: 16 }}>☰</button>
       </div>
@@ -182,11 +181,10 @@ export default function AppShell() {
       {/* Sidebar */}
       <div className={`sidebar${open ? " open" : ""}`}>
         <div style={{ padding: "24px 20px", borderBottom: "1px solid var(--border)" }}>
-          <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 16, letterSpacing: "-0.02em" }}>
-            <span style={{ color: "var(--amber)" }}>PRESET</span>
-            <span style={{ color: "var(--text)" }}>&amp;PROFIT</span>
+          <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontWeight: 500, fontSize: 23, letterSpacing: "0.3px", color: "var(--text)" }}>
+            Preset <span style={{ color: "var(--gold)" }}>&amp;</span> Profit
           </div>
-          <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2, letterSpacing: "0.08em" }}>BUSINESS AUDIT PLATFORM</div>
+          <div style={{ fontSize: 9, color: "var(--muted)", marginTop: 3, letterSpacing: "0.18em", textTransform: "uppercase" }}>Audit Intelligence Platform</div>
         </div>
 
         <nav style={{ padding: "12px 10px", flex: 1 }}>
@@ -235,7 +233,7 @@ export default function AppShell() {
               : `${usage.used} / ${usage.limit} audit${usage.limit !== 1 ? "s" : ""} used${usage.period === "month" ? " this month" : ""}`}
           </div>
           <div style={{ height: 3, background: "var(--surface)", borderRadius: 2, marginBottom: 12 }}>
-            <div style={{ height: "100%", width: usage.unlimited ? "100%" : `${usagePct}%`, background: usage.unlimited ? "var(--green)" : usage.atLimit ? "var(--red)" : "var(--amber)", borderRadius: 2, transition: "width .5s ease" }} />
+            <div style={{ height: "100%", width: usage.unlimited ? "100%" : `${usagePct}%`, background: usage.unlimited ? "var(--green)" : usage.atLimit ? "var(--red)" : "var(--warn)", borderRadius: 2, transition: "width .5s ease" }} />
           </div>
           <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {profile?.full_name || user?.email}

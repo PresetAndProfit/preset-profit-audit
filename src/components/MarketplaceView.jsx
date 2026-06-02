@@ -37,19 +37,19 @@ export default function MarketplaceView({ audits = [], onPipeline }) {
 
   return (
     <div className="page-pad" style={{ animation: "fadeUp .4s ease" }}>
-      <h1 style={{ fontFamily: "Syne", fontSize: 26, fontWeight: 800, letterSpacing: "-0.02em", marginBottom: 6 }}>Automation Marketplace</h1>
+      <h1 style={{ fontFamily: "Sora", fontSize: 26, fontWeight: 800, letterSpacing: "-0.02em", marginBottom: 6 }}>Automation Marketplace</h1>
       <p style={{ color: "var(--muted)", fontSize: 13, marginBottom: 18 }}>Productized done-for-you systems. Match them to your pipeline and sell the recurring retainer.</p>
 
       {/* Monetization signal */}
       <div style={{ display: "flex", gap: 12, marginBottom: 22, flexWrap: "wrap" }}>
         <div style={{ background: "var(--panel)", border: "1px solid rgba(0,214,143,0.3)", borderRadius: 8, padding: "14px 18px" }}>
           <div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>Recurring opportunity in pipeline</div>
-          <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 22, color: "var(--green)" }}>{usd(totalRecurring)}/mo</div>
+          <div style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 22, color: "var(--green)" }}>{usd(totalRecurring)}/mo</div>
           <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>across your open deals</div>
         </div>
         <div style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 8, padding: "14px 18px" }}>
           <div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>Recurring already sold</div>
-          <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 22, color: "var(--amber)" }}>{usd(soldRecurring)}/mo</div>
+          <div style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 22, color: "var(--amber)" }}>{usd(soldRecurring)}/mo</div>
           <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>tracked on closed deals</div>
         </div>
         <div style={{ flex: 1, minWidth: 200, display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
@@ -62,15 +62,15 @@ export default function MarketplaceView({ audits = [], onPipeline }) {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))", gap: 14, marginBottom: 28 }}>
         {BUNDLES.map(b => (
           <div key={b.id} style={{ background: "var(--panel)", border: "1px solid var(--amber)", borderRadius: 10, padding: "18px 20px" }}>
-            <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 17, marginBottom: 6 }}>{b.name}</div>
+            <div style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 17, marginBottom: 6 }}>{b.name}</div>
             <p style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6, marginBottom: 12 }}>{b.blurb}</p>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
               {b.members.map(id => CATALOG_BY_ID[id] && <Tag key={id} color="#6b6b85">{CATALOG_BY_ID[id].consumerName}</Tag>)}
             </div>
             <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-              <span style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 22, color: "var(--amber)" }}>{usd(b.setup)}</span>
+              <span style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 22, color: "var(--amber)" }}>{usd(b.setup)}</span>
               <span style={{ fontSize: 12, color: "var(--muted)" }}>setup +</span>
-              <span style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 22, color: "var(--amber)" }}>{usd(b.monthly)}</span>
+              <span style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 22, color: "var(--amber)" }}>{usd(b.monthly)}</span>
               <span style={{ fontSize: 12, color: "var(--muted)" }}>/mo</span>
             </div>
           </div>
@@ -87,7 +87,7 @@ export default function MarketplaceView({ audits = [], onPipeline }) {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 8 }}>
                 <div>
                   <Tag color="#4a9eff">{s.category}</Tag>
-                  <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 16, marginTop: 8 }}>{s.consumerName}</div>
+                  <div style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 16, marginTop: 8 }}>{s.consumerName}</div>
                 </div>
                 {mm && <span style={{ fontSize: 10, color: "var(--green)", border: "1px solid rgba(0,214,143,0.3)", borderRadius: 20, padding: "3px 9px", whiteSpace: "nowrap" }}>● {mm.deals} deal{mm.deals !== 1 ? "s" : ""}</span>}
               </div>
@@ -98,7 +98,7 @@ export default function MarketplaceView({ audits = [], onPipeline }) {
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", borderTop: "1px solid var(--border)", paddingTop: 12 }}>
                 <div>
-                  <span style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 18 }}>{usd(s.setupLow)}</span>
+                  <span style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 18 }}>{usd(s.setupLow)}</span>
                   <span style={{ fontSize: 11, color: "var(--muted)" }}> + {usd(s.monthly)}/mo</span>
                 </div>
                 {mm && <span style={{ fontSize: 11, color: "var(--green)", fontWeight: 700 }}>{usd(mm.monthly)}/mo in pipeline</span>}

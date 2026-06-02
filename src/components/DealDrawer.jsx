@@ -75,11 +75,11 @@ export default function DealDrawer({ deal, updateDeal, onClose, onViewReport, on
   return (
     <>
       <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 40 }} />
-      <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: "min(460px, 100vw)", background: "var(--bg, #0a0a0f)", borderLeft: "1px solid var(--border)", zIndex: 41, overflowY: "auto", boxShadow: "-12px 0 48px rgba(0,0,0,0.5)" }}>
+      <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: "min(460px, 100vw)", background: "var(--bg, #08080a)", borderLeft: "1px solid var(--border)", zIndex: 41, overflowY: "auto", boxShadow: "-12px 0 48px rgba(0,0,0,0.5)" }}>
         <div style={{ padding: "18px 22px", borderBottom: "1px solid var(--border)", position: "sticky", top: 0, background: "var(--panel)", zIndex: 1 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
             <div style={{ flex: 1 }}>
-              <div style={{ fontFamily: "Syne", fontWeight: 800, fontSize: 18 }}>{deal.businessName}</div>
+              <div style={{ fontFamily: "Sora", fontWeight: 800, fontSize: 18 }}>{deal.businessName}</div>
               <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap", alignItems: "center" }}>
                 <Tag color={stageColor(stage)}>{stageLabel(stage)}</Tag>
                 <Tag color="#6b6b85">{deal.industry}</Tag>

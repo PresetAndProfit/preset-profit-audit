@@ -34,7 +34,7 @@ export function StatCard({ label, value, delta, accent }) {
     }}>
       <div style={{ width: 2, height: "100%", background: accent, position: "absolute", left: 0, top: 0, borderRadius: "4px 0 0 4px" }} />
       <div style={{ fontSize: 11, color: "var(--muted)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>{label}</div>
-      <div style={{ fontSize: 28, fontWeight: 700, fontFamily: "Syne", color: "var(--text)" }}>{value}</div>
+      <div style={{ fontSize: 28, fontWeight: 700, fontFamily: "Sora", color: "var(--text)" }}>{value}</div>
       {delta && <div style={{ fontSize: 11, color: "var(--green)", marginTop: 4 }}>{delta}</div>}
     </div>
   );

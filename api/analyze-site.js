@@ -17,6 +17,11 @@ import {
   getUserPlan, countAudits, logUsageEvent, clientIp,
 } from "./_lib/usageServer.js";
 import { aiEnabled, generateConsultantReport } from "./_lib/aiFindings.js";
+import { classifyBusiness } from "./_lib/agents/classifier.js";
+import { gatherCompetitiveLandscape } from "./_lib/research/index.js";
+import { runCompetitorAgent } from "./_lib/agents/competitor.js";
+import { runSalesAgent } from "./_lib/agents/salesIntel.js";
+import { runSynthesisAgent } from "./_lib/agents/synthesis.js";
 import { validateReport, mustMentionCoverage } from "./_lib/findingsValidation.js";
 import { isDisabled } from "./_lib/systemSettings.js";
 import { isAdminEmail } from "./_lib/adminAuth.js";
@@ -24,13 +29,13 @@ import { isAdminEmail } from "./_lib/adminAuth.js";
 // Layer 2+3: run the AI consultant on a successful scrape, with one corrective
 // retry if the validator rejects the first attempt. Returns the validated
 // report or null (caller falls back to the deterministic archetype engine).
-async function runConsultant({ signals, bizName, industry, city, url }) {
+async function runConsultant({ signals, bizName, industry, city, url, profile }) {
   if (!aiEnabled) return null;
   let corrections = null;
   for (let attempt = 0; attempt < 2; attempt++) {
     let report;
     try {
-      report = await generateConsultantReport({ signals, bizName, industry, city, url, corrections });
+      report = await generateConsultantReport({ signals, bizName, industry, city, url, corrections, profile });
     } catch (e) {
       console.error("[analyze-site] consultant call failed", attempt, e?.message || e);
       return null; // hard error → deterministic fallback
@@ -72,6 +77,67 @@ export default async function handler(req, res) {
   const body = typeof req.body === "string" ? safeJson(req.body) : (req.body || {});
   const url = body.url;
   const { bizName = null, industry = null, city = null } = body;
+
+  // 2b. ACTION: competitor research (V2 Phase 3). Runs as a SEPARATE call after
+  // the main audit so each request stays well under the function timeout (no new
+  // route — action-routing on this endpoint). Consumes no credit; rate-limited
+  // because it spends on the Places API. Best-effort: returns available:false
+  // rather than erroring when there's no key/data.
+  if (body.action === "competitor") {
+    const crl = await checkRateLimit(user.id, "competitor_research", SCAN_LIMITS);
+    if (!crl.allowed) return res.status(429).json({ ok: false, error: "rate-limited" });
+    if (!bizName) return res.status(400).json({ ok: false, error: "missing-business" });
+    try {
+      const landscape = await gatherCompetitiveLandscape({ profile: body.profile || null, bizName, city, url: url || null });
+      const competitor = await runCompetitorAgent({ landscape, profile: body.profile || null });
+      await logUsageEvent(user.id, "competitor_research", { metadata: { ip: clientIp(req), available: !!competitor?.available } });
+      return res.status(200).json({ ok: true, competitor });
+    } catch (e) {
+      console.error("[analyze-site] competitor action error", e?.message || e);
+      return res.status(200).json({ ok: true, competitor: { available: false, reason: "error" } });
+    }
+  }
+
+  // 2c. ACTION: sales-process analysis (V2 Phase 4). Separate, parallel-able
+  // post-audit call (no new route, no credit). Pure reasoning over the scraped
+  // signals + the BIP — ranks the bottlenecks that materially affect growth in
+  // this industry by revenue impact (growth-driver weight × lead value × severity).
+  if (body.action === "sales") {
+    const srl = await checkRateLimit(user.id, "sales_intel", SCAN_LIMITS);
+    if (!srl.allowed) return res.status(429).json({ ok: false, error: "rate-limited" });
+    try {
+      const sales = await runSalesAgent({ signals: body.signals || {}, profile: body.profile || null });
+      await logUsageEvent(user.id, "sales_intel", { metadata: { ip: clientIp(req), bottlenecks: sales?.bottlenecks?.length || 0 } });
+      return res.status(200).json({ ok: true, sales });
+    } catch (e) {
+      console.error("[analyze-site] sales action error", e?.message || e);
+      return res.status(200).json({ ok: true, sales: { available: false, reason: "error" } });
+    }
+  }
+
+  // 2d. ACTION: synthesis (V2 Phase 7, the capstone). Assembles the GROWTH
+  // DIAGNOSIS from every prior stage the client has gathered (BIP + consultant
+  // blocks + competitor + sales). Separate post-audit call (no new route, no
+  // credit, rate-limited). Structured sections are deterministic/weight-ranked;
+  // the AI writes only the consultant-voice sections.
+  if (body.action === "synthesis") {
+    const yrl = await checkRateLimit(user.id, "synthesis", SCAN_LIMITS);
+    if (!yrl.allowed) return res.status(429).json({ ok: false, error: "rate-limited" });
+    try {
+      const diagnosis = await runSynthesisAgent({
+        profile: body.profile || null,
+        consultant: body.consultant || null,
+        competitor: body.competitor || null,
+        sales: body.sales || null,
+      });
+      await logUsageEvent(user.id, "synthesis", { metadata: { ip: clientIp(req) } });
+      return res.status(200).json({ ok: true, diagnosis });
+    } catch (e) {
+      console.error("[analyze-site] synthesis action error", e?.message || e);
+      return res.status(200).json({ ok: true, diagnosis: { available: false, reason: "error" } });
+    }
+  }
+
   if (!url || typeof url !== "string") {
     return res.status(400).json({ ok: false, error: "missing-url" });
   }
@@ -105,12 +171,22 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: false, error: "scan-failed", detail: String(e?.message || e) });
   }
 
-  // 7. AI consultant (Layer 2+3). Only when the scrape produced real signals.
+  // 7. AI pipeline (Layers 0–3). Only when the scrape produced real signals.
   //    Any failure leaves `result` untouched → deterministic fallback downstream.
   if (result.ok && result.signals) {
     try {
-      const ai = await runConsultant({ signals: result.signals, bizName, industry, city, url });
+      // Stage 0 — Business Classification Agent. Produces the Business
+      // Intelligence Profile (the spine) BEFORE analysis, so the consultant
+      // reasons from one shared understanding of the business model. Null on
+      // any failure → consultant falls back to the user's industry hint.
+      const profile = await classifyBusiness({ signals: result.signals, bizName, industry, city, url });
+      if (profile) result.profile = profile;
+
+      const ai = await runConsultant({ signals: result.signals, bizName, industry, city, url, profile });
       if (ai) {
+        // Persist the spine inside the report blob (→ audits.data) so the
+        // competitor / sales / social agents in later phases can consume it.
+        if (profile) ai.businessIntelligenceProfile = profile;
         result.ai = ai;
         result.aiGenerated = true;
       }

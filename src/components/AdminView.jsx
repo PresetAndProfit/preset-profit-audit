@@ -16,7 +16,7 @@ const ago = (d) => {
   return `${Math.floor(s / 86400)}d ago`;
 };
 
-const TABS = ["Overview", "Activity", "Users", "Audits", "Revenue", "Emails", "Controls"];
+const TABS = ["Overview", "Activity", "Users", "Audits", "Revenue", "Intelligence", "Emails", "Controls"];
 
 const Panel = ({ children, style }) => (
   <div style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 10, padding: 20, ...style }}>{children}</div>
@@ -24,6 +24,21 @@ const Panel = ({ children, style }) => (
 const Th = ({ children }) => <th style={{ padding: "10px 12px", borderBottom: "1px solid var(--border)", whiteSpace: "nowrap", textAlign: "left", color: "var(--muted)", fontSize: 10, letterSpacing: "0.08em" }}>{children}</th>;
 const Td = ({ children, mono }) => <td style={{ padding: "9px 12px", fontFamily: mono ? "IBM Plex Mono" : "inherit", fontSize: 12 }}>{children}</td>;
 const planColor = (p) => (p === "agency" ? "var(--green)" : p === "professional" ? "var(--amber)" : "var(--muted)");
+
+// Horizontal bar list for the Intelligence dashboard (module scope so it isn't
+// re-created each render).
+const IntelBars = ({ rows, max }) => (
+  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+    {(rows || []).map((r) => (
+      <div key={r.name} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ flex: 1, fontSize: 12, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span>
+        <span style={{ width: 90, height: 6, background: "rgba(255,255,255,0.06)", borderRadius: 3 }}><span style={{ display: "block", height: "100%", width: `${Math.round((r.count / (max || 1)) * 100)}%`, background: "var(--amber)", borderRadius: 3 }} /></span>
+        <span style={{ width: 28, textAlign: "right", fontSize: 11, color: "var(--muted)", fontFamily: "IBM Plex Mono" }}>{r.count}</span>
+      </div>
+    ))}
+    {!(rows || []).length && <span style={{ fontSize: 12, color: "var(--muted)" }}>No data yet.</span>}
+  </div>
+);
 
 export default function AdminView() {
   const [tab, setTab] = useState("Overview");
@@ -48,6 +63,7 @@ export default function AdminView() {
       {tab === "Users" && <Users />}
       {tab === "Audits" && <Audits />}
       {tab === "Revenue" && <Revenue />}
+      {tab === "Intelligence" && <Intelligence />}
       {tab === "Emails" && <Emails />}
       {tab === "Controls" && <Controls />}
     </div>
@@ -90,6 +106,79 @@ function Overview() {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 14 }}>
       {cards.map(([label, value, accent]) => <StatCard key={label} label={label} value={value} accent={accent} />)}
+    </div>
+  );
+}
+
+// ── INTELLIGENCE (V5 Executive Dashboard — visibility, not AI) ────────────────
+function Intelligence() {
+  const { loading, error, data, reload } = useFetch("intelligence");
+  const [busy, setBusy] = useState(false);
+  if (loading) return <Loading />;
+  if (error) return <ErrorBox error={error} />;
+  const d = data.intelligence;
+  const fa = d.forecastAccuracy || {};
+  const rebuild = async () => { setBusy(true); await call("rebuild_benchmarks"); await reload(); setBusy(false); };
+  const maxRec = Math.max(1, ...(d.mostRecommendedWorkflows || []).map((x) => x.count));
+  const maxFind = Math.max(1, ...(d.topFindings || []).map((x) => x.count));
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14 }}>
+        <StatCard label="Total Audits Stored" value={d.totalAudits} accent="var(--amber)" />
+        <StatCard label="Recommendations" value={Object.values(d.acceptanceFunnel || {}).reduce((a, b) => a + b, 0)} accent="var(--blue)" />
+        <StatCard label="Outcomes Recorded" value={d.outcomeStats?.recorded || 0} accent="var(--green)" />
+        <StatCard label="Forecast Accuracy" value={fa.withinBandPct != null ? `${fa.withinBandPct}%` : "—"} accent="var(--green)" />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <Panel><div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>Most Recommended Workflows</div><IntelBars rows={d.mostRecommendedWorkflows} max={maxRec} /></Panel>
+        <Panel><div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>Top Findings (prescribed #1)</div><IntelBars rows={d.topFindings} max={maxFind} /></Panel>
+      </div>
+
+      <Panel>
+        <div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>Recommendation Funnel</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {["recommended", "viewed", "accepted", "declined", "deployed", "completed"].map((s) => (
+            <div key={s} style={{ flex: "1 1 120px", border: "1px solid var(--border)", borderRadius: 8, padding: "10px 12px" }}>
+              <div style={{ fontSize: 18, fontWeight: 800, color: "var(--text)" }}>{d.acceptanceFunnel?.[s] || 0}</div>
+              <div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{s}</div>
+            </div>
+          ))}
+        </div>
+      </Panel>
+
+      <Panel style={{ padding: 0 }}>
+        <div style={{ padding: "14px 16px 0", fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Industry Trends</div>
+        <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 8 }}>
+          <thead><tr><Th>Industry</Th><Th>Audits</Th><Th>Avg Score</Th><Th>Avg Modeled Leak</Th></tr></thead>
+          <tbody>
+            {(d.industryTrends || []).map((t) => (
+              <tr key={t.industry} style={{ borderBottom: "1px solid var(--border)" }}>
+                <Td>{t.industry}</Td><Td mono>{t.audits}</Td><Td mono>{t.avgScore ?? "—"}</Td><Td mono>{t.avgLeakHigh != null ? money(t.avgLeakHigh) : "—"}</Td>
+              </tr>
+            ))}
+            {!(d.industryTrends || []).length && <tr><Td>No audits stored yet.</Td></tr>}
+          </tbody>
+        </table>
+      </Panel>
+
+      <Panel>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <span style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Industry Benchmarks (anonymized · min 5 audits)</span>
+          <Btn onClick={rebuild} disabled={busy}>{busy ? "Rebuilding…" : "Rebuild benchmarks"}</Btn>
+        </div>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead><tr><Th>Industry</Th><Th>Size</Th><Th>Metric</Th><Th>n</Th><Th>p25</Th><Th>p50</Th><Th>p75</Th><Th>Mean</Th></tr></thead>
+          <tbody>
+            {(d.benchmarks || []).map((b) => (
+              <tr key={b.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                <Td>{b.industry}</Td><Td>{b.business_size}</Td><Td>{b.metric}</Td><Td mono>{b.sample_size}</Td><Td mono>{b.p25}</Td><Td mono>{b.p50}</Td><Td mono>{b.p75}</Td><Td mono>{b.mean}</Td>
+              </tr>
+            ))}
+            {!(d.benchmarks || []).length && <tr><Td>No benchmarks yet — rebuild once ≥5 audits exist per industry.</Td></tr>}
+          </tbody>
+        </table>
+      </Panel>
     </div>
   );
 }

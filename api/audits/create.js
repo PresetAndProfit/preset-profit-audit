@@ -9,6 +9,7 @@ import { assertCanCreateAudit, enforceAuditLimitForClient, logUsageEvent } from 
 import { isDisabled } from "../_lib/systemSettings.js";
 import { isAdminEmail } from "../_lib/adminAuth.js";
 import { onAuditComplete, onActivationStart } from "../_lib/lifecycleEmails.js";
+import { recordAuditIntelligence, setRecommendationStatus, upsertOutcome } from "../_lib/intelligence.js";
 import { effectivePlan } from "../../src/lib/plans.js";
 import { STAGE_KEYS } from "../../src/lib/dealEngine.js";
 
@@ -118,6 +119,21 @@ export default async function handler(req, res) {
     }
   }
 
+  // ── V5 persistence: recommendation status transition ──────────────────────
+  // User-scoped lifecycle of a prescribed workflow (recommended→viewed→accepted
+  // →declined→deployed→completed). No credit, no audit creation. Structured
+  // capture only — the future learning layer reads this, nothing acts on it yet.
+  if (body.op === "rec_status") {
+    const r = await setRecommendationStatus({ userId: user.id, recId: body.recId, status: body.status });
+    return res.status(r.ok ? 200 : (r.error === "not-found" ? 404 : 400)).json(r);
+  }
+
+  // ── V5 persistence: outcome capture (operator-entered before/after metrics) ─
+  if (body.op === "outcome_upsert") {
+    const r = await upsertOutcome({ userId: user.id, outcome: body.outcome });
+    return res.status(r.ok ? 200 : 400).json(r);
+  }
+
   // System control: admin can disable audits platform-wide (admins exempt).
   if (!isAdminEmail(user.email) && await isDisabled("audits_disabled")) {
     return res.status(503).json({ error: "audits-disabled" });
@@ -189,6 +205,12 @@ export default async function handler(req, res) {
         isPaid: effectivePlan(sub)?.id !== "free",
       });
     }
+
+    // V5 persistence: project this audit into the snapshot + recommendation
+    // tables for future Layers 7/8. Fires on every save (idempotent upserts keep
+    // the projection in sync when a report is re-saved with richer data).
+    // Best-effort — never fails or delays the audit save.
+    await recordAuditIntelligence({ userId: user.id, audit: data?.data ?? audit, auditRowId: data?.id ?? null });
 
     return res.status(200).json({ ok: true, audit: data?.data ?? audit });
   } catch (e) {

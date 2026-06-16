@@ -66,6 +66,51 @@ export default function AuditScanner({ onComplete, onScanStart, onScanEnd }) {
     }
 
     const report = generateAudit(form, siteAnalysis);
+
+    // Phases 3 & 4 — Competitor Intelligence + Sales Process Analysis. Fired as
+    // SEPARATE, PARALLEL requests (keeps each call under the function timeout)
+    // once we have the Business Intelligence Profile. Best-effort: neither blocks
+    // or fails the report.
+    const profile = siteAnalysis?.profile || report.businessIntelligenceProfile || null;
+    if (profile && form.bizName.trim()) {
+      addLog("Comparing you against local competitors & analysing your sales process…");
+      const post = (body) => authedFetch("/api/analyze-site", { body }).then(res => res.json()).catch(() => null);
+      const [comp, sales] = await Promise.all([
+        post({ action: "competitor", profile, bizName: form.bizName, city: form.city, url: trimmedUrl || null }),
+        post({ action: "sales", profile, signals: siteAnalysis?.signals || null }),
+      ]);
+      if (comp?.ok && comp.competitor?.available) {
+        report.competitorIntelligence = comp.competitor;
+        const m = comp.competitor.metrics || {};
+        addLog(`✓ Compared against ${comp.competitor.competitors?.length || 0} nearby competitors`);
+        if (m.reviewLeader != null && m.yourReviews != null) addLog(`  Reviews — you: ${m.yourReviews} · local leader: ${m.reviewLeader}`);
+      }
+      if (sales?.ok && sales.sales?.available) {
+        report.salesIntelligence = sales.sales;
+        const top = sales.sales.topPriority;
+        addLog(`✓ Ranked ${sales.sales.bottlenecks?.length || 0} sales bottlenecks by revenue impact`);
+        if (top) addLog(`  Top sales priority: ${top.label} (impact ${top.impactScore})`);
+      }
+
+      // Phase 7 — Synthesis. The capstone: assemble the 8-section Growth
+      // Diagnosis from every stage gathered above. Fired last (needs all inputs).
+      addLog("Synthesising your Growth Diagnosis…");
+      const syn = await post({
+        action: "synthesis",
+        profile,
+        consultant: report.aiGenerated ? {
+          revenueLeaks: report.revenueLeaks, revenueLeakSummary: report.revenueLeakSummary,
+          automationPlan: report.automationPlan,
+        } : null,
+        competitor: report.competitorIntelligence || null,
+        sales: report.salesIntelligence || null,
+      });
+      if (syn?.ok && syn.diagnosis?.available) {
+        report.growthDiagnosis = syn.diagnosis;
+        addLog("✓ Growth Diagnosis ready");
+      }
+    }
+
     setScanning(false);
     onScanEnd?.();
     onComplete(report);

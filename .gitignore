@@ -33,3 +33,6 @@ ai-audit-sample.json
 *.njsproj
 *.sln
 *.sw?
+
+# Generated PDF-export sample (scripts/check-pdf.mjs)
+Growth-Diagnosis-sample.html

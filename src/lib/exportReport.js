@@ -54,11 +54,20 @@ function esc(s) {
 
 const DATE_STR = new Date().toLocaleDateString("en-US", { year:"numeric", month:"long", day:"numeric" });
 
+import { surfacedOpportunities } from "./opportunity/opportunityEngine.js";
+import { nextBestAction } from "./nextBestAction.js";
+import { departmentIntelligence } from "./departmentEngine.js";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PAGE BUILDERS
 // ─────────────────────────────────────────────────────────────────────────────
 
 function coverPage(r, brand) {
+  // V2: when a Growth Diagnosis is present, frame the document as a strategic
+  // assessment rather than a website-centric automation audit.
+  const isGrowth = !!r.growthDiagnosis?.available;
+  const coverEyebrow = isGrowth ? "STRATEGIC GROWTH ASSESSMENT" : "AUTOMATION OPPORTUNITY REPORT";
+  const reportType = isGrowth ? "Strategic Growth Diagnosis" : "Full Automation Opportunity Audit";
   const mark = brand.whiteLabel
     ? (brand.logoUrl
         ? `<img src="${esc(brand.logoUrl)}" alt="${esc(brand.name)}" style="height:34px;max-width:220px;object-fit:contain"/>`
@@ -69,7 +78,7 @@ function coverPage(r, brand) {
   <div class="page cover">
     <div class="cover-top">
       ${mark}
-      <div class="cover-eyebrow">AUTOMATION OPPORTUNITY REPORT</div>
+      <div class="cover-eyebrow">${coverEyebrow}</div>
     </div>
 
     <div class="cover-main">
@@ -86,7 +95,7 @@ function coverPage(r, brand) {
       <div class="cover-meta">
         <div class="cover-meta-row"><span class="cover-meta-label">Prepared for</span><span>${esc(r.businessName)}</span></div>
         <div class="cover-meta-row"><span class="cover-meta-label">Report date</span><span>${DATE_STR}</span></div>
-        <div class="cover-meta-row"><span class="cover-meta-label">Report type</span><span>Full Automation Opportunity Audit</span></div>
+        <div class="cover-meta-row"><span class="cover-meta-label">Report type</span><span>${reportType}</span></div>
       </div>
       <div class="cover-prepared">
         <div class="cover-prepared-by">Prepared by</div>
@@ -391,13 +400,98 @@ const obsChip = (g) => `<span style="font-size:8.5px;font-weight:700;letter-spac
 const pill = (lo, hi) => `<span style="font-size:9.5px;font-weight:700;color:${GREEN};background:#eaf7f0;border:1px solid #b9e2cd;border-radius:20px;padding:2px 9px;white-space:nowrap">modeled opportunity: ${rng(lo, hi)}</span>`;
 const sColor = (s) => (s === "good" ? GREEN : s === "warn" ? AMBER : RED);
 
-function crSection(eyebrow, heading, inner) {
+function crSection(eyebrow, heading, inner, footerLabel = "Consultant Report") {
   return `<div class="page interior cr"><div class="page-spine"></div><div class="page-content">
     <div class="section-eyebrow">${esc(eyebrow)}</div>
     <h2 class="section-heading">${esc(heading)}</h2>
     ${inner}
-    <div class="page-footer"><span>Consultant Report</span><span></span></div>
+    <div class="page-footer"><span>${esc(footerLabel)}</span><span></span></div>
   </div></div>`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// V2 GROWTH DIAGNOSIS pages (mirror src/components/GrowthDiagnosis.jsx).
+// Rendered first (after the cover) when r.growthDiagnosis is present — the
+// headline deliverable. All ranking/weighting is computed server-side.
+// ─────────────────────────────────────────────────────────────────────────────
+function diagImpactBar(score) {
+  const s = Math.max(0, Math.min(100, Number(score) || 0));
+  const col = s >= 70 ? RED : s >= 45 ? AMBER : GOLD2;
+  return `<span style="display:inline-flex;align-items:center;gap:6px;flex-shrink:0">
+    <span style="width:54px;height:6px;border-radius:3px;background:#ece8e0;overflow:hidden;display:inline-block"><span style="display:block;height:100%;width:${s}%;background:${col}"></span></span>
+    <span style="font-size:9px;color:${MUTED}">${s}</span></span>`;
+}
+
+function growthDiagnosisPages(r) {
+  const d = r.growthDiagnosis;
+  if (!d || !d.available) return "";
+  const F = "Growth Diagnosis";
+  const fmtR = (o) => (o ? `$${(o.low || 0).toLocaleString()}–$${(o.high || 0).toLocaleString()}` : "—");
+  let out = "";
+
+  // A — Executive summary + weighting + what is limiting growth.
+  const chips = (Array.isArray(d.weightingUsed) ? d.weightingUsed : [])
+    .map((w) => `<span style="font-size:9px;padding:2px 8px;border-radius:20px;border:1px solid ${BORDER};color:${MUTED};margin:0 5px 5px 0;display:inline-block">${esc(w.driver)} <b style="color:${INK}">${w.weight}%</b></span>`).join("");
+  const wlg = (d.whatIsLimitingGrowth || []).map((x) => `<div style="border:1px solid ${BORDER};border-radius:8px;padding:11px 15px;margin-bottom:9px;background:${SUBTLE}">
+    <div style="font-size:13px;font-weight:700;color:${INK}">${esc(x.constraint)}</div>
+    <div style="font-size:11.5px;color:${MUTED};line-height:1.55;margin-top:4px">${esc(x.why)}</div>
+    ${x.growthDriver ? `<div style="font-size:8.5px;color:${GOLD2};text-transform:uppercase;letter-spacing:.07em;margin-top:6px">Growth driver: ${esc(x.growthDriver)}</div>` : ""}
+  </div>`).join("");
+  out += crSection("STRATEGIC GROWTH DIAGNOSIS", `Why ${r.businessName} isn't growing faster`,
+    `${chips ? `<div style="margin-bottom:14px">${chips}</div>` : ""}
+     <div class="exec-box"><p class="exec-text">${esc(d.executiveSummary)}</p></div>
+     <div class="section-eyebrow" style="margin-top:20px">WHAT IS LIMITING GROWTH</div>${wlg}`, F);
+
+  // B — Top revenue leaks + competitive disadvantages.
+  const leaks = (d.topRevenueLeaks || []).map((x) => `<div style="border:1px solid ${BORDER};border-left:3px solid ${GOLD};border-radius:8px;padding:11px 15px;margin-bottom:9px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px"><div style="font-size:12.5px;font-weight:700">${esc(x.title)}${x.dollars ? ` <span style="color:${GREEN};font-weight:600">· modeled ${rng(x.dollars.low, x.dollars.high)}</span>` : ""}</div>${diagImpactBar(x.impact)}</div>
+    <div style="font-size:11.5px;color:${MUTED};line-height:1.55;margin-top:5px">${esc(x.consequence)}</div></div>`).join("");
+  const comp = (d.topCompetitiveDisadvantages || []).map((x) => `<div style="font-size:12px;line-height:1.6;padding:9px 14px;background:#f8f4eb;border:1px solid #e0d8c4;border-radius:6px;margin-bottom:7px;color:#4a4032">${esc(x.summary || x.note)}${x.source ? ` <span style="color:${MUTED};font-size:9px">· ${esc(x.source)}</span>` : ""}</div>`).join("");
+  out += crSection("GROWTH DIAGNOSIS — RISKS", "Top revenue leaks & competitive gaps",
+    `${leaks}<div class="section-eyebrow" style="margin-top:20px">TOP COMPETITIVE DISADVANTAGES</div>${comp}`, F);
+
+  // C — Highest-ROI improvements + automations.
+  const roi = (d.highestRoiImprovements || []).map((x) => `<div style="border:1px solid ${BORDER};border-radius:8px;padding:11px 15px;margin-bottom:9px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px"><div style="font-size:12.5px;font-weight:700">#${x.rank} ${esc(x.action)} <span style="font-size:10px;color:${MUTED};font-weight:500">· ${esc(x.growthDriver)} · ${esc(x.effort)} effort</span></div>${diagImpactBar(x.impactScore)}</div>
+    <div style="font-size:11.5px;color:${MUTED};line-height:1.55;margin-top:5px">${esc(x.rationale)}</div></div>`).join("");
+  const autos = (d.automationOpportunities || []).map((a) => `<span style="font-size:11px;padding:5px 11px;border-radius:8px;border:1px solid ${GOLD}66;color:${GOLD2};background:#fffdf5;margin:0 6px 6px 0;display:inline-block">${esc(a.name)}</span>`).join("");
+  out += crSection("GROWTH DIAGNOSIS — ACTIONS", "Highest-ROI improvements",
+    `${roi}<div class="section-eyebrow" style="margin-top:20px">RECOMMENDED AUTOMATION OPPORTUNITIES</div><div>${autos}</div>`, F);
+
+  // C2 — Outcome forecast (V5 Layer 5).
+  if (d.forecast?.available) {
+    const fc = d.forecast, p = fc.portfolio;
+    const cards = p ? `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">${[["30 days", p.d30], ["90 days", p.d90], ["12 months", p.m12]].map(([lb, o]) => `<div style="border:1px solid ${BORDER};border-top:2px solid ${GREEN};border-radius:8px;padding:12px 13px"><div style="font-size:9.5px;color:${GREEN};text-transform:uppercase;letter-spacing:.07em;font-weight:700;margin-bottom:5px">${lb}</div><div style="font-size:17px;font-weight:800;color:${INK};font-variant-numeric:tabular-nums">${fmtR(o)}</div><div style="font-size:9px;color:${MUTED};margin-top:3px">${esc(o.note)}</div></div>`).join("")}</div>` : "";
+    const lines = (fc.recommendations || []).filter((x) => x.canonical).map((x) => `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 13px;border:1px solid ${BORDER};border-radius:8px;margin-bottom:6px"><div style="font-size:11.5px"><b>${esc(x.canonical)}</b> · <span style="color:${GREEN}">${x.metric.low}–${x.metric.high}${esc(x.metric.unit)} ${esc(x.metric.label)}</span>${x.ranking ? ` · <span style="color:${MUTED}">${esc(x.ranking)}</span>` : ""}</div><div style="font-size:9px;color:${MUTED};white-space:nowrap;font-family:monospace">${x.trajectory.d30}% → ${x.trajectory.d90}% → 100%</div></div>`).join("");
+    out += crSection("OUTCOME FORECAST", "What results to expect", `${cards}${lines}<div style="font-size:9px;color:${MUTED};margin-top:8px">${esc(fc.method)}</div>`, F);
+  }
+
+  // C3 — Opportunity Intelligence (V6). Computed from the audit at export time;
+  // wrapped so a missing field can never break the export.
+  try {
+    const opps = surfacedOpportunities(r).slice(0, 4);
+    if (opps.length) {
+      const nba = nextBestAction(r, opps);
+      const depts = departmentIntelligence(r, opps).filter((x) => x.key !== "executive").sort((a, b) => a.currentHealthScore - b.currentHealthScore).slice(0, 6);
+      const nbaBlock = nba ? `<div style="border:1px solid ${GOLD};background:#fffdf5;border-radius:10px;padding:14px 16px;margin-bottom:14px"><div style="font-size:9px;color:${GOLD2};text-transform:uppercase;letter-spacing:.12em;font-weight:700;margin-bottom:5px">★ Next best action</div><div style="font-size:14px;font-weight:800">${esc(nba.actionTitle)}</div><div style="font-size:11.5px;color:${MUTED};line-height:1.55;margin-top:4px">${esc(nba.explanation)}</div><div style="font-size:10.5px;color:${GREEN};margin-top:6px">${nba.revenueRange ? `${rng(nba.revenueRange.low, nba.revenueRange.high)} · ` : ""}${esc(nba.timeToLaunch)}${nba.recommendedWorkflow ? ` · ${esc(nba.recommendedWorkflow)}` : ""}</div></div>` : "";
+      const oppCards = opps.map((o) => `<div style="border:1px solid ${BORDER};border-left:3px solid ${o.tier === "urgent" ? RED : GOLD};border-radius:8px;padding:11px 15px;margin-bottom:9px">
+        <div style="display:flex;justify-content:space-between;gap:10px"><div style="font-size:12.5px;font-weight:700">${esc(o.title)}</div><div style="font-size:9px;color:${o.tier === "urgent" ? RED : GOLD2};text-transform:uppercase">${esc(o.tier)} · ${o.score}</div></div>
+        <div style="font-size:11.5px;color:${MUTED};line-height:1.5;margin:5px 0">${esc(o.whyItMatters)}</div>
+        <div style="font-size:10px;color:${MUTED}">${esc(o.timeWindow)} · ${esc(o.departmentOwner)}${o.recommendedWorkflow ? ` · ${esc(o.recommendedWorkflow)}` : ""} · <span style="color:${GREEN}">${rng(o.estimatedRevenueRange.low, o.estimatedRevenueRange.high)}</span></div></div>`).join("");
+      const deptChips = depts.map((x) => `<span style="display:inline-block;font-size:10px;padding:3px 9px;margin:0 5px 5px 0;border-radius:6px;border:1px solid ${BORDER};color:${INK}">${esc(x.name)} <b style="color:${x.currentHealthScore >= 60 ? GREEN : x.currentHealthScore >= 45 ? AMBER : RED}">${x.currentHealthScore}</b></span>`).join("");
+      out += crSection("OPPORTUNITY INTELLIGENCE", "Opportunities, campaigns & department health", `${nbaBlock}<div class="section-eyebrow" style="margin-top:6px">GROWTH OPPORTUNITIES</div>${oppCards}<div class="section-eyebrow" style="margin-top:16px">DEPARTMENT HEALTH</div><div>${deptChips}</div>`, F);
+    }
+  } catch (e) { /* opportunity page is additive — never break export */ void e; }
+
+  // D — 90-day plan + verdict.
+  const plan = d.ninetyDayPlan || { now: [], next: [], later: [] };
+  const planCol = (label, items, c) => `<div style="border:1px solid ${BORDER};border-top:2px solid ${c};border-radius:8px;padding:11px 13px"><div style="font-size:9.5px;color:${c};text-transform:uppercase;letter-spacing:.07em;font-weight:700;margin-bottom:8px">${label}</div>${(items && items.length ? items : ["—"]).map((it) => `<div style="font-size:11px;line-height:1.45;color:${INK};margin-bottom:6px">${esc(it)}</div>`).join("")}</div>`;
+  out += crSection("GROWTH DIAGNOSIS — 90-DAY PLAN", "Your next 90 days",
+    `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">${planCol("Now · Days 1–30", plan.now, GREEN)}${planCol("Next · Days 31–60", plan.next, GOLD)}${planCol("Later · Days 61–90", plan.later, "#2563eb")}</div>
+     <div class="section-eyebrow" style="margin-top:20px">CONSULTANT VERDICT</div>
+     <div style="border:1px solid ${GOLD}66;background:#fffdf5;border-radius:10px;padding:16px 18px;font-size:13px;line-height:1.7;color:${INK}">${esc(d.consultantVerdict)}</div>`, F);
+
+  return out;
 }
 
 function consultantPages(r) {
@@ -964,6 +1058,7 @@ export function buildHTML(r, { branding = null, watermark = false } = {}) {
 </div>
 
 ${coverPage(r, brand)}
+${growthDiagnosisPages(r)}
 ${consultantPages(r)}
 ${summaryPage(r, brand)}
 ${findingsPage(r, brand)}

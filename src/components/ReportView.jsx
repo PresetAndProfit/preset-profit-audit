@@ -5,6 +5,7 @@ import { downloadReport } from "../lib/exportReport.js";
 import { calcROI } from "../lib/roiCalc.js";
 import AssumptionsEditor from "./AssumptionsEditor.jsx";
 import ConsultantReport from "./ConsultantReport.jsx";
+import GrowthDiagnosis from "./GrowthDiagnosis.jsx";
 
 const TABS = ["overview", "findings", "what to fix", "30-day plan"];
 const PHASE_COLORS = ["#00d68f", "#f5a623", "#4a9eff"];
@@ -28,7 +29,9 @@ const findingBorder = s => s === "good" ? "rgba(0,214,143,0.2)" : s === "warn" ?
 // watermark: true for the free tier (stamps the PDF + shows a banner)
 // onShare:  async () => url   (Agency share-link generator)
 export default function ReportView({ report: r, onBack, onSave, isAlreadySaved, branding = null, shared = false, watermark = false, onShare = null, onGenerateRoadmap = null }) {
-  const [tab, setTab]     = useState("overview");
+  // The Growth Diagnosis (V2 synthesis) leads when present; legacy tabs follow.
+  const hasDiagnosis = !!r.growthDiagnosis?.available;
+  const [tab, setTab]     = useState(hasDiagnosis ? "growth diagnosis" : "overview");
   const [saved, setSaved] = useState(!!isAlreadySaved);
   const [sent, setSent]   = useState(false);
   const [shareUrl, setShareUrl] = useState("");
@@ -264,7 +267,7 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved, 
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: 2, marginBottom: 18, background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 8, padding: 4, width: "fit-content", flexWrap: "wrap" }}>
-        {TABS.map(t => (
+        {(hasDiagnosis ? ["growth diagnosis", ...TABS] : TABS).map(t => (
           <button key={t} onClick={() => setTab(t)} style={{
             padding: "7px 14px", borderRadius: 6, border: "none", cursor: "pointer",
             fontFamily: "IBM Plex Mono", fontSize: 11, letterSpacing: "0.05em", textTransform: "uppercase",
@@ -274,6 +277,11 @@ export default function ReportView({ report: r, onBack, onSave, isAlreadySaved, 
           }}>{t}</button>
         ))}
       </div>
+
+      {/* Growth Diagnosis (V2 synthesis) */}
+      {tab === "growth diagnosis" && hasDiagnosis && (
+        <GrowthDiagnosis diagnosis={r.growthDiagnosis} />
+      )}
 
       {/* Overview */}
       {tab === "overview" && (

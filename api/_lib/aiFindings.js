@@ -12,6 +12,8 @@
 // (api/analyze-site.js) falls back to the deterministic archetype engine.
 import Anthropic from "@anthropic-ai/sdk";
 import { ARCHETYPES, ARCHETYPE_IDS, archetypeForIndustry } from "../../src/lib/industryProfiles.js";
+import { renderFrameworkForPrompt } from "../../src/lib/frameworks/index.js";
+import { renderProfileForPrompt } from "./agents/profile.js";
 
 const MODEL = "claude-opus-4-8";
 
@@ -157,8 +159,9 @@ Return ONLY a single JSON object (no markdown fences, no prose before or after) 
 Keep grounding, vocabulary, no-fake-competitor, modeled-money, and signal-reliability rules intact across every section.`;
 
 // Trim the signals object to the fields that matter, so the prompt is compact
-// and deterministic (good for prompt caching of the system prefix).
-function compactSignals(sig) {
+// and deterministic (good for prompt caching of the system prefix). Exported so
+// the ClassifierAgent sees the EXACT same signal vocabulary as the consultant.
+export function compactSignals(sig) {
   return {
     detectedName: sig.detectedName ?? null,
     title: sig.title ?? null,
@@ -194,13 +197,30 @@ function compactSignals(sig) {
   };
 }
 
-function buildUserMessage({ signals, bizName, industry, city, url, corrections }) {
+function buildUserMessage({ signals, bizName, industry, city, url, corrections, profile }) {
   const hintArchetype = archetypeForIndustry(industry);
+  // When the classifier ran (Phase 2), drive the framework off its ranked
+  // candidates (blended on low confidence) instead of the weak user hint; the
+  // BIP block becomes the spine the consultant reasons from. Falls back to the
+  // hint string when no profile is available.
+  const frameworkBlock = profile?.industryCandidates?.length
+    ? renderFrameworkForPrompt(profile.industryCandidates)
+    : renderFrameworkForPrompt(industry);
+  const profileBlock = renderProfileForPrompt(profile);
   const parts = [
     `BUSINESS: ${bizName || signals.detectedName || "(unknown)"}`,
     city ? `LOCATION: ${city}` : null,
     url ? `WEBSITE: ${url}` : null,
     `USER-SELECTED INDUSTRY (hint only): ${industry || "(none)"} → likely archetype "${hintArchetype.id}"`,
+    "",
+    // The Business Intelligence Profile (spine) — present when the classifier
+    // ran. Authoritative classification + business model, framed as inference.
+    profileBlock || null,
+    profileBlock ? "" : null,
+    // Diagnosis-first industry framework (best-practice CONTEXT, NOT observed
+    // fact). Primes the consultant to hunt for this vertical's specific revenue
+    // leaks and benchmark the signals — without weakening the grounding rules.
+    frameworkBlock,
     "",
     "SCRAPED HOMEPAGE SIGNALS (the only facts you may treat as observed):",
     JSON.stringify(compactSignals(signals), null, 2),

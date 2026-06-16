@@ -10,6 +10,7 @@ import AgencyConsole from "./AgencyConsole.jsx";
 import ServicesView from "./ServicesView.jsx";
 import LeadsView from "./LeadsView.jsx";
 import IntelligencePanel from "./IntelligencePanel.jsx";
+import ChiefOfStaff from "./ChiefOfStaff.jsx";
 import AccountView from "./AccountView.jsx";
 import AdminView from "./AdminView.jsx";
 import UpgradeButton from "./UpgradeButton.jsx";
@@ -23,6 +24,7 @@ import { conversionState } from "../lib/conversion.js";
 
 const NAV = [
   { id: "dashboard",     label: "Dashboard",    icon: "◈" },
+  { id: "briefing",      label: "Chief of Staff", icon: "✦" },
   { id: "scan",          label: "New Audit",    icon: "⊕" },
   { id: "leads",         label: "Sales Pipeline",icon: "◎" },
   { id: "marketplace",   label: "Marketplace",  icon: "▣" },
@@ -334,6 +336,10 @@ export default function AppShell() {
             onViewRoadmap={openRoadmapFor}
             onShare={handleShare}
           />
+        )}
+
+        {view === "briefing" && (
+          <ChiefOfStaff audits={audits} onOpen={(id) => { const a = audits.find((x) => x.id === id); if (a) openReport(a); }} />
         )}
 
         {view === "intelligence" && (

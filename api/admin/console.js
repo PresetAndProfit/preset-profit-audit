@@ -8,6 +8,7 @@ import { supabaseAdmin } from "../_lib/supabaseAdmin.js";
 import { requireAdmin } from "../_lib/adminAuth.js";
 import { getSettings, setSettings, logAdminEvent } from "../_lib/systemSettings.js";
 import { sendLifecycleEmail } from "../_lib/email.js";
+import { intelligenceDashboard, rebuildBenchmarks } from "../_lib/intelligence.js";
 import { PLANS } from "../../src/lib/plans.js";
 
 const PAID = ["professional", "agency"];
@@ -235,6 +236,13 @@ export default async function handler(req, res) {
             newUpgrades: { today: upToday, week: upWeek, month: upMonth },
           },
         });
+      }
+      // V5 — Executive Intelligence Dashboard (visibility, not AI).
+      case "intelligence":  return res.status(200).json({ ok: true, intelligence: await intelligenceDashboard() });
+      case "rebuild_benchmarks": {
+        const r = await rebuildBenchmarks();
+        await logAdminEvent("benchmarks_rebuilt", { userId: admin.id, email: admin.email, detail: { message: `rebuilt ${r.benchmarks} benchmark rows from ${r.snapshots} snapshots`, by: admin.email } });
+        return res.status(200).json({ ok: true, ...r });
       }
       case "email_metrics": return res.status(200).json({ ok: true, metrics: await emailMetrics() });
       case "emails":        return res.status(200).json({ ok: true, emails: await emails(body) });

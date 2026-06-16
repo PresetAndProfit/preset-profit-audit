@@ -10,6 +10,7 @@ import { supabaseAdmin } from "./supabaseAdmin.js";
 import { sendLifecycleEmail, formatCents, formatDate } from "./email.js";
 import { planForPriceId } from "./stripe.js";
 import { getPlan } from "../../src/lib/plans.js";
+import { rebuildBenchmarks } from "./intelligence.js";
 
 const HOUR = 3600 * 1000;
 const DAY = 24 * HOUR;
@@ -324,8 +325,12 @@ async function activationBatch() {
 }
 
 export async function runDailySweep() {
-  const counts = { trial_ending_3d: 0, trial_ending_1d: 0, reengagement: 0, followup_reminder: 0, activation: 0 };
+  const counts = { trial_ending_3d: 0, trial_ending_1d: 0, reengagement: 0, followup_reminder: 0, activation: 0, benchmarks: 0 };
   const now = Date.now();
+
+  // V5: refresh the anonymized industry benchmarks from accumulated snapshots.
+  // Pure aggregation — collects/structures data, no learning. Best-effort.
+  try { const r = await rebuildBenchmarks(); counts.benchmarks = r.benchmarks; } catch { /* ignore */ }
 
   // Trial ending in ~3 days (48–72h out) and ~1 day (0–24h out).
   try { counts.trial_ending_3d = await trialEndingBatch("trial_ending_3d", now + 48 * HOUR, now + 72 * HOUR); } catch { /* ignore */ }

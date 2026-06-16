@@ -406,6 +406,10 @@ export function generateAudit(form, siteAnalysis = null) {
     detectedBusinessType: aiReport ? aiReport.businessType : null,
     // V3 Consultant Intelligence blocks (pass-through; null on the fallback path).
     businessIntelligence: aiReport ? aiReport.businessIntelligence || null : null,
+    // V2 Phase 2 — the Business Intelligence Profile (spine), produced by the
+    // Stage-0 classifier. Persisted in audits.data so later-phase agents consume
+    // one shared business model instead of re-deriving it.
+    businessIntelligenceProfile: aiReport ? aiReport.businessIntelligenceProfile || null : null,
     executiveBrief: aiReport ? aiReport.executiveBrief || null : null,
     competitiveBenchmark: aiReport ? aiReport.competitiveBenchmark || null : null,
     revenueLeaks: aiReport ? aiReport.revenueLeaks || null : null,

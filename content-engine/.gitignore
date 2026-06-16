@@ -1,0 +1,11 @@
+node_modules
+.env
+service-account.json
+
+# runtime data & assets — keep the engine code in git, not the content
+data/*.json
+inbox/*
+!inbox/.gitkeep
+exports/*
+!exports/.gitkeep
+feeds/*.jsonl

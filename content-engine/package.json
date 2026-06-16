@@ -1,0 +1,24 @@
+{
+  "name": "preset-profit-content-os",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "description": "Preset & Profit Content Operating System — multi-source intake, vision analysis, brand-profile caption generation, approval workflow, content calendar, and exports. B7Squad is the default profile.",
+  "bin": {
+    "content-os": "./cli.js"
+  },
+  "scripts": {
+    "intake": "node cli.js intake-pull --source all",
+    "batch": "node cli.js batch",
+    "generate": "node cli.js generate all-pending",
+    "schedule": "node cli.js schedule",
+    "calendar": "node cli.js calendar",
+    "web": "node cli.js web",
+    "setup-sheet": "node cli.js setup-sheet"
+  },
+  "dependencies": {
+    "exifr": "^7.1.3",
+    "googleapis": "^144.0.0",
+    "jpeg-js": "^0.4.4"
+  }
+}
